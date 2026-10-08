@@ -35,8 +35,10 @@ The prototype must not imply that AI autonomously owns or approves engineering d
 | Q-1 | Generated or AI-assisted code and documentation shall be reviewed by the candidate before acceptance. | BR-2 | Must |
 | Q-2 | Automated tests shall cover the URL-shortener's core create, persistence, redirect, analytics, and error behaviors. | BR-3 | Must |
 | Q-3 | The solution shall document how correctness and output quality were validated, including test commands and results. | BR-5 | Must |
-| Q-4 | The design shall discuss scalability, security, and performance considerations and disclose known limitations. Numeric service-level targets are not specified by the assignment. | BR-3, BR-5 | Must |
+| Q-4 | The design shall discuss scalability, security, and performance considerations and disclose known limitations. | BR-3, BR-5 | Must |
 | Q-5 | The solution shall be maintainable and understandable to a reviewer, with clear separation of responsibilities and readable documentation. | BR-5 | Should |
+| Q-6 | Under the specified peak workload, the URL-shortener shall support a 100:1 redirect-to-creation request ratio, with approximately 1,000 redirect requests per second and 10 link-creation requests per second. | Performance targets supplied for the architecture | Must |
+| Q-7 | At the specified peak workload, redirect latency for `GET /{short_code}` shall be P95 <= 50 ms and shortening latency for `POST /api/v1/shorten` shall be P95 <= 200 ms. | Performance targets supplied for the architecture | Must |
 
 ## Acceptance Checks
 
@@ -47,6 +49,7 @@ The prototype must not imply that AI autonomously owns or approves engineering d
 - Analytics are recorded and retrievable using the documented API or interface.
 - Invalid input and unknown short codes return the documented errors.
 - Automated tests exercise the core URL-shortener behaviors and can be run using the documented command.
+- Performance validation reports the workload, test duration, environment, and cache state, and evaluates Q-6 and Q-7 against the specified peak request rates and P95 limits.
 - Each of the three required example scenarios includes task decomposition, AI-assisted execution, and validation evidence.
 - Architecture, trade-offs, risks, assumptions, and limitations are documented.
 
@@ -54,10 +57,10 @@ The prototype must not imply that AI autonomously owns or approves engineering d
 
 | Topic | Current interpretation or assumption | Status / follow-up |
 |---|---|---|
-| Meaning of “scalable” | The design will explain scaling considerations and trade-offs. No traffic, latency, or availability target was supplied. | Assumption; do not claim numeric guarantees. |
+| Performance targets | The architecture input specifies a 100:1 redirect-to-creation ratio, peak rates of about 1,000 redirects/s and 10 creations/s, and P95 limits of 50 ms and 200 ms respectively. | Treat as required targets; benchmark environment, duration, and cache-state methodology still need to be defined. |
 | Analytics scope | At minimum, analytics means recording and retrieving usage for a short link. Exact metrics and granularity are not specified. | Assumption; state the chosen scope in design. |
 | AI integration | AI tools must assist development tasks. The assignment does not explicitly require embedding a live AI provider in the runnable prototype. | Design decision; explain the selected demonstration approach. |
-| Technology stack | No language, framework, database, or hosting platform is mandated. | Candidate proposes and justifies choices in engineering design. |
+| Technology stack | The assignment itself does not mandate a stack. The architecture input specifies Python 3.11+, FastAPI, async SQLAlchemy 2.0, PostgreSQL, and Redis for this design. | Treat as architecture constraints for this use case; record separately if they become approved project-wide requirements. |
 | Short-link behavior | The assignment does not specify custom aliases, expiration, deletion, or authentication. | Out of scope unless chosen and documented. |
 | Analytics privacy | Collection of IP addresses, user-agent strings, or other personal data is not required by the assignment. | Avoid unless justified; document any collection and retention. |
 | Approval | No actual business stakeholder is provided for the interview assignment. | Baseline approval is simulated by the candidate and must be described as such. |

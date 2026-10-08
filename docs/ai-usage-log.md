@@ -12,13 +12,12 @@ Use this log to track meaningful AI-assisted tasks, engineer review, edge cases,
 
 | Task | Prompt summary and AI contribution | Engineer review, edge cases, and resulting changes | Validation and artifacts |
 |---|---|---|---|
-| None currently | Add a row when a task starts; summarize the prompt and AI contribution. | Record review decisions and edge cases as they are found. | Record checks performed and link relevant artifacts. |
+| URL-shortener architecture (draft, 2026-10-08; user review pending) | Prompt summary: design for Python 3.11+, FastAPI, async SQLAlchemy 2.0, PostgreSQL, and Redis; include creation/redirect flows, schema/indexes, cache TTL, telemetry, trade-offs, and explicit workload/latency targets. AI drafted the architecture and performance rationale. | Compared with the analysis. The supplied 100:1 ratio, ~1,000 redirect RPS, ~10 creation RPS, and endpoint P95 limits resolved the earlier missing-target question, so added them as Q-6/Q-7 and acceptance checks. Aligned the creation route to `POST /api/v1/shorten`. Documented that FastAPI background publication may lose events on process failure, that analytics writes still need load testing, and that target compliance is not yet measured. | Editor diagnostics report no errors for the updated Markdown. Runtime/load tests were not run; benchmark results remain pending. [Requirement analysis](02-requirement-analysis.md); [Engineering design](03-engineering-design.md). |
 
 ## Planned Tasks
 
 | Task | Prompt / AI contribution to record | Engineer review / edge cases to record | Validation / artifacts to record |
 |---|---|---|---|
-| Engineering design | Prompt, alternatives, and AI suggestions considered. | Design decisions, trade-offs, assumptions, and rejected suggestions. | Design review and links to design artifacts. |
 | Task breakdown | Prompt and AI-suggested tasks or dependencies. | Correctness, missing dependencies, sequencing changes, and scope decisions. | Review against requirements and links to the task plan. |
 | Implementation | Prompt and AI-assisted code, debugging, or refactoring. | Code review, edge cases, changes, and rejected suggestions. | Relevant tests, results, and code links. |
 | Testing, examples, and documentation | Prompt and AI-assisted tests, scenarios, or documentation. | Coverage gaps, accuracy checks, and edits. | Test commands/results and links to final artifacts. |
