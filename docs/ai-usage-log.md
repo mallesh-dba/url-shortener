@@ -7,18 +7,18 @@ Use this log to track meaningful AI-assisted tasks, engineer review, edge cases,
 | Task | Prompt summary and AI contribution | Engineer review, edge cases, and resulting changes | Validation and artifacts |
 |---|---|---|---|
 | Business requirement and analysis (retrospective, 2026-10-08) | Asked AI to turn the assignment into business requirements and a requirement analysis, keeping unspecified implementation choices open. AI drafted scope, requirements, acceptance checks, and assumptions. | Compared with the assignment. Identified that “scalable” has no numeric target, no stack or external approver is specified, and test criteria should be planned before coding while tests run during or after implementation. Kept stack open, labeled approval simulated, and clarified test timing. | Compared against the assignment brief; editor diagnostics reported no errors. [Business requirement](01-business-requirement.md); [Requirement analysis](02-requirement-analysis.md). Exact prompt and model details were not recorded. |
+| URL-shortener engineering design (2026-10-08) | Prompt summary: design for Python 3.11+, FastAPI, async SQLAlchemy 2.0, PostgreSQL, and Redis; include creation/redirect flows, schema/indexes, cache TTL, telemetry, trade-offs, and workload/latency targets. AI drafted the architecture and performance rationale. | Compared with the analysis. Added supplied 100:1 ratio, ~1,000 redirect RPS, ~10 creation RPS, and endpoint P95 limits as Q-6/Q-7. Aligned the creation route to `POST /api/v1/shorten`. Documented analytics delivery risks and that performance targets still need benchmarking. | Design reviewed and merged; Markdown diagnostics passed. Load testing was not part of this task. The performance targets remain unverified. [Requirement analysis](02-requirement-analysis.md); [Engineering design](03-engineering-design.md). |
 
 ## In-Progress Tasks
 
 | Task | Prompt summary and AI contribution | Engineer review, edge cases, and resulting changes | Validation and artifacts |
 |---|---|---|---|
-| None currently | Add a row when a task starts; summarize the prompt and AI contribution. | Record review decisions and edge cases as they are found. | Record checks performed and link relevant artifacts. |
+| None currently | Add a row when a task starts. | Record review decisions and edge cases as they are found. | Record checks performed and link relevant artifacts. |
 
 ## Planned Tasks
 
 | Task | Prompt / AI contribution to record | Engineer review / edge cases to record | Validation / artifacts to record |
 |---|---|---|---|
-| Engineering design | Prompt, alternatives, and AI suggestions considered. | Design decisions, trade-offs, assumptions, and rejected suggestions. | Design review and links to design artifacts. |
 | Task breakdown | Prompt and AI-suggested tasks or dependencies. | Correctness, missing dependencies, sequencing changes, and scope decisions. | Review against requirements and links to the task plan. |
 | Implementation | Prompt and AI-assisted code, debugging, or refactoring. | Code review, edge cases, changes, and rejected suggestions. | Relevant tests, results, and code links. |
 | Testing, examples, and documentation | Prompt and AI-assisted tests, scenarios, or documentation. | Coverage gaps, accuracy checks, and edits. | Test commands/results and links to final artifacts. |
