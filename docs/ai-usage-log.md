@@ -1,49 +1,24 @@
 # AI-Assisted Work Log
 
-This log records meaningful AI-assisted tasks and the engineer's review of the resulting work. Record what AI was asked to do, what it contributed, what the engineer checked or changed, edge cases found, and how the final result was validated.
-
-For entries written after a task is complete, mark them **Retrospective**. Label a prompt as a summary unless the exact prompt was preserved. Do not invent missing prompts, model details, review actions, or validation results. Do not include secrets or sensitive data.
-
-## Task Entry Template
-
-### [Task ID] - [Task name]
-
-- **Date:**
-- **Status:** Planned / In progress / Reviewed / Validated
-- **Record type:** Contemporaneous / Retrospective
-- **AI tool/model:** Record only what is known
-- **Task objective:**
-- **Inputs and context:** Requirements, files, or constraints supplied to AI
-- **Prompt:** Exact prompt or clearly labeled summary
-- **AI contribution:** Suggestions, analysis, code, tests, or documentation produced
-- **Engineer review:** Checks performed; what was accepted, changed, or rejected and why
-- **Edge cases or gaps found:**
-- **Resulting changes:**
-- **Validation:** Checks performed and actual results
-- **Related artifacts:** Links to files, commits, tests, or review evidence
+Use this log to track meaningful AI-assisted tasks, engineer review, edge cases, resulting changes, and validation. Record exact prompts when available; otherwise label them as summaries. Mark entries added after completion as retrospective. Do not invent missing details or include secrets.
 
 ## Completed Tasks
 
-### DOC-1 - Business requirement and requirement analysis
+| Task | Prompt summary and AI contribution | Engineer review, edge cases, and resulting changes | Validation and artifacts |
+|---|---|---|---|
+| Business requirement and analysis (retrospective, 2026-10-08) | Asked AI to turn the assignment into business requirements and a requirement analysis, keeping unspecified implementation choices open. AI drafted scope, requirements, acceptance checks, and assumptions. | Compared with the assignment. Identified that “scalable” has no numeric target, no stack or external approver is specified, and test criteria should be planned before coding while tests run during or after implementation. Kept stack open, labeled approval simulated, and clarified test timing. | Compared against the assignment brief; editor diagnostics reported no errors. [Business requirement](01-business-requirement.md); [Requirement analysis](02-requirement-analysis.md). Exact prompt and model details were not recorded. |
 
-- **Date:** 2026-10-08
-- **Status:** Reviewed
-- **Record type:** Retrospective
-- **AI tool/model:** GitHub Copilot; model details not recorded
-- **Task objective:** Produce assignment-aligned business requirements and a requirement analysis for the URL-shortener engineering assignment.
-- **Inputs and context:** Assignment brief and project README.
-- **Prompt:** Summary, not verbatim: create business requirement and requirement analysis Markdown documents for the assignment, keeping unspecified implementation decisions open.
-- **AI contribution:** Drafted the business scope, outcomes, functional and quality requirements, acceptance checks, assumptions, and traceability to later design and delivery artifacts.
-- **Engineer review:** Reviewed the content against the assignment and asked for clarification about simulated approval, stack selection, task sequencing, testing timing, and evidence of AI usage.
-- **Edge cases or gaps found:**
-  - The word “scalable” has no numeric traffic, latency, or availability target in the assignment.
-  - The assignment does not prescribe a technology stack; proposed choices must not be described as stakeholder-approved.
-  - Verification criteria should be defined before implementation, while tests are run during or after implementation.
-  - No external stakeholder is available to provide actual approval.
-- **Resulting changes:** Left technology choices open for engineering design; documented scalability as a design concern without claiming numeric guarantees; labeled approval as simulated; clarified testing timing; and identified AI usage evidence as a supporting artifact.
-- **Validation:** Compared the documents with the assignment brief. Editor diagnostics reported no errors for the created Markdown files.
-- **Related artifacts:** [Business requirement](01-business-requirement.md), [Requirement analysis](02-requirement-analysis.md)
+## In-Progress Tasks
 
-## Future Tasks
+| Task | Prompt summary and AI contribution | Engineer review, edge cases, and resulting changes | Validation and artifacts |
+|---|---|---|---|
+| None currently | Add a row when a task starts; summarize the prompt and AI contribution. | Record review decisions and edge cases as they are found. | Record checks performed and link relevant artifacts. |
 
-Add a separate entry for each meaningful AI-assisted design, task breakdown, implementation, testing, or documentation task. Update its status as work progresses and record actual review and validation results before marking it validated.
+## Planned Tasks
+
+| Task | Prompt / AI contribution to record | Engineer review / edge cases to record | Validation / artifacts to record |
+|---|---|---|---|
+| Engineering design | Prompt, alternatives, and AI suggestions considered. | Design decisions, trade-offs, assumptions, and rejected suggestions. | Design review and links to design artifacts. |
+| Task breakdown | Prompt and AI-suggested tasks or dependencies. | Correctness, missing dependencies, sequencing changes, and scope decisions. | Review against requirements and links to the task plan. |
+| Implementation | Prompt and AI-assisted code, debugging, or refactoring. | Code review, edge cases, changes, and rejected suggestions. | Relevant tests, results, and code links. |
+| Testing, examples, and documentation | Prompt and AI-assisted tests, scenarios, or documentation. | Coverage gaps, accuracy checks, and edits. | Test commands/results and links to final artifacts. |
