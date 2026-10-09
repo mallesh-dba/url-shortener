@@ -1,3 +1,4 @@
+import asyncio
 from collections.abc import Awaitable
 from contextlib import AbstractAsyncContextManager
 from typing import Protocol
@@ -17,10 +18,14 @@ class RedisProbe(Protocol):
     def ping(self) -> Awaitable[bool | None]: ...
 
 
-async def postgres_is_ready(engine: DatabaseProbe) -> bool:
+async def postgres_is_ready(
+    engine: DatabaseProbe,
+    timeout_seconds: float,
+) -> bool:
     try:
-        async with engine.connect():
-            return True
+        async with asyncio.timeout(timeout_seconds):
+            async with engine.connect():
+                return True
     except (SQLAlchemyError, TimeoutError):
         return False
 
@@ -40,7 +45,10 @@ async def liveness() -> dict[str, str]:
 @router.get("/health/ready")
 async def readiness(request: Request, response: Response) -> dict[str, object]:
     dependencies = {
-        "postgres": await postgres_is_ready(request.app.state.engine),
+        "postgres": await postgres_is_ready(
+            request.app.state.engine,
+            request.app.state.settings.db_readiness_timeout_seconds,
+        ),
         "redis": await redis_is_ready(request.app.state.redis),
     }
     ready = all(dependencies.values())

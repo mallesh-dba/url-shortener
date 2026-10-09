@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     db_max_overflow: Annotated[int, Field(ge=0)] = 20
     db_pool_timeout_seconds: Annotated[float, Field(gt=0)] = 5
     db_connect_timeout_seconds: Annotated[float, Field(gt=0)] = 5
+    db_readiness_timeout_seconds: Annotated[float, Field(gt=0)] = 2
     redis_max_connections: Annotated[int, Field(gt=0)] = 50
     redis_connect_timeout_seconds: Annotated[float, Field(gt=0)] = 2
     redis_socket_timeout_seconds: Annotated[float, Field(gt=0)] = 2

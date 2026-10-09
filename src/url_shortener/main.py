@@ -43,6 +43,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 expire_on_commit=False,
             )
             application.state.redis = redis_client
+            application.state.settings = current_settings
             yield
         finally:
             try:

@@ -31,6 +31,23 @@ class FailedEngine:
         raise OperationalError("connect", {}, RuntimeError("database unavailable"))
 
 
+class HangingEngine:
+    def connect(self):
+        class HangingContext:
+            async def __aenter__(self) -> object:
+                await asyncio.Event().wait()
+
+            async def __aexit__(
+                self,
+                exc_type: object,
+                exc: object,
+                traceback: object,
+            ) -> None:
+                return None
+
+        return HangingContext()
+
+
 class SessionContext:
     def __init__(self) -> None:
         self.session = object()
@@ -157,12 +174,13 @@ def test_dependency_readiness_checks() -> None:
 
     async def run_checks() -> tuple[bool, bool, bool]:
         return (
-            await postgres_is_ready(ReadyEngine()),
-            await postgres_is_ready(FailedEngine()),
+            await postgres_is_ready(ReadyEngine(), 0.1),
+            await postgres_is_ready(FailedEngine(), 0.1),
+            await postgres_is_ready(HangingEngine(), 0.01),
             await redis_is_ready(redis_client),
         )
 
-    assert asyncio.run(run_checks()) == (True, False, True)
+    assert asyncio.run(run_checks()) == (True, False, False, True)
 
     redis_client.ping.side_effect = TimeoutError
     assert asyncio.run(redis_is_ready(redis_client)) is False

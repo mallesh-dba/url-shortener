@@ -23,7 +23,9 @@ uvicorn url_shortener.main:app --reload --app-dir src
 `GET /health/live` reports whether the process is running and does not contact
 external services. `GET /health/ready` checks PostgreSQL and Redis and returns
 `503` if either dependency cannot be reached. The readiness response reports
-dependency status without exposing connection details.
+dependency status without exposing connection details. The PostgreSQL readiness
+probe has a configurable two-second deadline by default
+(`URL_SHORTENER_DB_READINESS_TIMEOUT_SECONDS`).
 
 Run the current tests with:
 
