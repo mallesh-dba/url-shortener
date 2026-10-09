@@ -1,2 +1,37 @@
-# url-shortener
-Build a scalable URL shortener service with APIs, persistence, and analytics
+# URL Shortener
+
+Build a scalable URL shortener service with APIs, persistence, and analytics.
+
+## Development setup
+
+Requires Python 3.11 or newer. Install the project and development dependencies:
+
+```powershell
+python -m pip install -e ".[dev]"
+```
+
+Copy `.env.example` to `.env` and update the PostgreSQL and Redis connection
+settings for your local services. The example values are for local development
+only; do not use them as production credentials.
+
+Start the API:
+
+```powershell
+uvicorn url_shortener.main:app --reload --app-dir src
+```
+
+`GET /health/live` reports whether the process is running and does not contact
+external services. `GET /health/ready` checks PostgreSQL and Redis and returns
+`503` if either dependency cannot be reached. The readiness response reports
+dependency status without exposing connection details.
+
+Run the current tests with:
+
+```powershell
+pytest
+```
+
+Database and Redis pool settings are per application process. Size them against
+the database/server connection budgets multiplied by the number of deployed
+processes; the example values are starting defaults, not load-tested capacity
+recommendations.

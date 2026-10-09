@@ -48,10 +48,12 @@ The prototype-level requirements REQ-1–REQ-3 and REQ-9–REQ-10, and cross-cut
 
 #### T-102: Set Up Async Application and Configuration
 
+- **Status:** Implemented and unit-tested on 2026-10-09. Startup/shutdown, configuration, and health behavior have automated coverage; live connectivity against PostgreSQL and Redis remains to be verified in an environment running those services.
 - **Description & scope:** Set up the Python/FastAPI application, dependency management, settings and secret loading, health/readiness behavior, async SQLAlchemy engine and request-scoped sessions, and reusable async Redis client. Configure bounded connection pools and operation timeouts.
 - **Dependencies:** T-101.
 - **AI-assistance point:** Ask AI for a minimal scaffold and lifecycle wiring that follows project conventions, including an explanation of resource cleanup and pool assumptions.
 - **Human validation / verification check:** Start the service and check health/readiness. Verify resources close on shutdown, invalid configuration fails explicitly, secrets are not logged or committed, and network I/O is not performed synchronously on the event loop.
+- **Implementation record:** App scaffold, environment settings, async resource lifecycle, `/health/live`, `/health/ready`, setup instructions, and focused tests are present. Defaults are 10 DB pooled connections plus up to 20 overflow and 50 Redis connections per process; these are configurable starting assumptions, not load-tested sizing. Readiness checks PostgreSQL and Redis and returns only status booleans; liveness does not contact dependencies.
 
 ### Phase 2 — Persist and serve short links
 
