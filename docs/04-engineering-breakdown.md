@@ -16,10 +16,35 @@ Tests should be developed alongside each behavior. T-109 is the cross-feature in
 
 #### T-101: Define Baseline Requirements and Acceptance Criteria
 
+- **Status:** Accepted as the implementation baseline on 2026-10-09, at the user's direction. This is not external stakeholder approval and does not mean implementation, tests, or performance targets are complete.
 - **Description & scope:** Turn REQ-4–REQ-8 and Q-6/Q-7 into API contracts, error responses, functional acceptance checks, and a benchmark protocol. Use Python 3.11+, FastAPI, async SQLAlchemy 2.0, PostgreSQL, and Redis as the constraints in this design. Keep custom aliases, expiration, authentication, retention, and loss-resistant analytics out of baseline scope until approved.
 - **Dependencies:** None.
 - **AI-assistance point:** Ask AI to trace each behavior to a requirement ID, identify gaps and ambiguity, and draft acceptance criteria without silently deciding open product questions.
 - **Human validation / verification check:** Check traceability against the requirements, approve endpoint/error contracts, and record unresolved decisions. Treat approximately 1,000 redirects/s, 10 creations/s, and the P95 limits as targets to measure, not results already achieved.
+
+##### T-101 Traceability and Acceptance Record
+
+| Baseline behavior | Requirement | Accepted contract / criterion |
+|---|---|---|
+| Create a short link from a valid destination | REQ-4 | `POST /api/v1/shorten` accepts `destination_url`; returns `201` with `code`, `short_url`, and `created_at`. Only absolute HTTP(S) URLs are accepted; the service does not fetch them. |
+| Persist the mapping | REQ-5 | PostgreSQL is authoritative for the short-code-to-destination mapping. A successful creation remains available after cache loss/restart. |
+| Redirect a known short code | REQ-6 | `GET /{code}` returns `302` with a `Location` header containing the stored destination. |
+| Record and retrieve usage | REQ-7 | A redirect schedules click-event publication; a worker persists events idempotently and updates the aggregate. Analytics returns at least `code` and `clicks_total`. The design's baseline delivery is best effort and the aggregate may be eventually consistent. |
+| Document invalid and unknown-resource errors | REQ-8 | Invalid creation input returns `422`; unknown redirect and analytics codes return `404`; creation persistence failure returns `503`. Error bodies use one consistent JSON shape to be finalized before API implementation. |
+| Meet peak request rates | Q-6 | Validate approximately 1,000 redirects/s and 10 creations/s (100:1) in a measured load test. These are targets, not current results. |
+| Meet endpoint latency | Q-7 | At the Q-6 workload, measure redirect P95 against 50 ms and creation P95 against 200 ms; do not claim success without benchmark evidence. |
+
+The prototype-level requirements REQ-1–REQ-3 and REQ-9–REQ-10, and cross-cutting quality requirements Q-1–Q-5, remain applicable to the overall deliverable but are not URL-shortener endpoint behaviors owned solely by T-101. They are addressed through the prototype, implementation, testing, and documentation work.
+
+**Open decisions retained without a silent default:**
+
+- Final JSON error-body fields and the public/base URL used to construct `short_url`.
+- Detailed destination-URL validation edge cases and the bounded code-collision retry limit.
+- Analytics freshness expectations and whether best-effort click loss is acceptable beyond this prototype baseline.
+- Benchmark duration, warm-up, environment, concurrency model, traffic distribution, and acceptable error rate. Before T-110, record these in the benchmark plan; separately report warm-cache, cold-cache, and Redis-failure runs.
+- Authentication, rate limiting, abuse controls, analytics retention, custom aliases, expiration, updates/deletion, and any collection of personal data are not part of the accepted baseline; obtain explicit approval before adding them.
+
+**Acceptance record:** Baseline scope and criteria above are marked accepted for implementation planning at the user's direction on 2026-10-09. This is not external stakeholder sign-off. The open decisions remain visible follow-ups and do not constitute evidence that code, automated tests, or Q-6/Q-7 performance targets have been completed.
 
 #### T-102: Set Up Async Application and Configuration
 
