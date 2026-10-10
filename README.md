@@ -15,6 +15,13 @@ URL settings for your environment. `URL_SHORTENER_PUBLIC_BASE_URL` is the
 HTTP(S) origin used to construct returned short URLs. The example values are
 for local development only; do not use them as production credentials.
 
+Apply the PostgreSQL schema migration before using the link-creation API
+(especially when setting up a fresh database):
+
+```powershell
+alembic upgrade head
+```
+
 Start the API:
 
 ```powershell
@@ -44,12 +51,6 @@ Run the current tests with:
 
 ```powershell
 pytest
-```
-
-Apply the PostgreSQL schema migration after configuring `.env`:
-
-```powershell
-alembic upgrade head
 ```
 
 For a disposable development/test database, reverse the current migration with:

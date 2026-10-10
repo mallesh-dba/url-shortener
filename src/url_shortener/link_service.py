@@ -34,13 +34,14 @@ def generate_short_code() -> str:
 
 def _is_code_collision(error: IntegrityError) -> bool:
     original = error.orig
-    diagnostic = getattr(original, "diag", None)
+    cause = getattr(original, "__cause__", None)
+    diagnostic = getattr(cause, "diag", None)
     sqlstate = getattr(original, "sqlstate", None) or getattr(
         original,
         "pgcode",
         None,
     )
-    constraint_name = getattr(original, "constraint_name", None) or getattr(
+    constraint_name = getattr(cause, "constraint_name", None) or getattr(
         diagnostic,
         "constraint_name",
         None,

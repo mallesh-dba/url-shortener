@@ -1,12 +1,13 @@
 import json
 import re
 from datetime import UTC, datetime
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
+import asyncpg
 import pytest
 from fastapi.testclient import TestClient
 from redis.exceptions import RedisError
+from sqlalchemy.dialects.postgresql.asyncpg import AsyncAdapt_asyncpg_dbapi
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -37,6 +38,17 @@ def make_session() -> AsyncMock:
 
     session.flush.side_effect = populate_generated_columns
     return session
+
+
+def adapted_unique_violation(constraint_name: str) -> IntegrityError:
+    driver_error = asyncpg.exceptions.UniqueViolationError("duplicate key")
+    driver_error.constraint_name = constraint_name
+    adapted_error = AsyncAdapt_asyncpg_dbapi(asyncpg).IntegrityError(
+        str(driver_error),
+        driver_error,
+    )
+    adapted_error.__cause__ = driver_error
+    return IntegrityError("INSERT", {}, adapted_error)
 
 
 def post_create_link(
@@ -128,14 +140,7 @@ def test_create_link_commits_before_best_effort_cache_and_returns_contract() -> 
 def test_create_link_retries_only_short_code_unique_conflict() -> None:
     session = make_session()
     redis_client = AsyncMock()
-    collision = IntegrityError(
-        "INSERT",
-        {},
-        SimpleNamespace(
-            sqlstate="23505",
-            constraint_name="uq_short_links_code",
-        ),
-    )
+    collision = adapted_unique_violation("uq_short_links_code")
 
     flush_count = 0
 
@@ -167,14 +172,7 @@ def test_create_link_retries_only_short_code_unique_conflict() -> None:
 def test_create_link_stops_after_bounded_collision_retries() -> None:
     session = make_session()
     redis_client = AsyncMock()
-    collision = IntegrityError(
-        "INSERT",
-        {},
-        SimpleNamespace(
-            sqlstate="23505",
-            constraint_name="uq_short_links_code",
-        ),
-    )
+    collision = adapted_unique_violation("uq_short_links_code")
     session.flush.side_effect = [collision] * 5
 
     with patch(
