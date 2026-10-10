@@ -33,6 +33,18 @@ Run the current tests with:
 pytest
 ```
 
+Apply the PostgreSQL schema migration after configuring `.env`:
+
+```powershell
+alembic upgrade head
+```
+
+For a disposable development/test database, reverse the current migration with:
+
+```powershell
+alembic downgrade base
+```
+
 Database and Redis pool settings are per application process. Size them against
 the database/server connection budgets multiplied by the number of deployed
 processes; the example values are starting defaults, not load-tested capacity
