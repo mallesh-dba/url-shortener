@@ -10,9 +10,10 @@ Requires Python 3.11 or newer. Install the project and development dependencies:
 python -m pip install -e ".[dev]"
 ```
 
-Copy `.env.example` to `.env` and update the PostgreSQL and Redis connection
-settings for your local services. The example values are for local development
-only; do not use them as production credentials.
+Copy `.env.example` to `.env` and update the PostgreSQL, Redis, and public base
+URL settings for your environment. `URL_SHORTENER_PUBLIC_BASE_URL` is the
+HTTP(S) origin used to construct returned short URLs. The example values are
+for local development only; do not use them as production credentials.
 
 Start the API:
 
@@ -26,6 +27,18 @@ external services. `GET /health/ready` checks PostgreSQL and Redis and returns
 dependency status without exposing connection details. The PostgreSQL readiness
 probe has a configurable two-second deadline by default
 (`URL_SHORTENER_DB_READINESS_TIMEOUT_SECONDS`).
+
+Create a short link with:
+
+```powershell
+Invoke-RestMethod -Method Post `
+  -Uri http://127.0.0.1:8000/api/v1/shorten `
+  -ContentType application/json `
+  -Body '{"destination_url":"https://example.com/path"}'
+```
+
+The API returns the generated code, its public short URL, and creation time.
+Creation errors use `{"error":{"code":"...","message":"...","details":...}}`.
 
 Run the current tests with:
 

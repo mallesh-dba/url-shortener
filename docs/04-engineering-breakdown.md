@@ -30,7 +30,7 @@ Tests should be developed alongside each behavior. T-109 is the cross-feature in
 | Persist the mapping | REQ-5 | PostgreSQL is authoritative for the short-code-to-destination mapping. A successful creation remains available after cache loss/restart. |
 | Redirect a known short code | REQ-6 | `GET /{code}` returns `302` with a `Location` header containing the stored destination. |
 | Record and retrieve usage | REQ-7 | A redirect schedules click-event publication; a worker persists events idempotently and updates the aggregate. Analytics returns at least `code` and `clicks_total`. The design's baseline delivery is best effort and the aggregate may be eventually consistent. |
-| Document invalid and unknown-resource errors | REQ-8 | Invalid creation input returns `422`; unknown redirect and analytics codes return `404`; creation persistence failure returns `503`. Error bodies use one consistent JSON shape to be finalized before API implementation. |
+| Document invalid and unknown-resource errors | REQ-8 | Invalid creation input returns `422`; unknown redirect and analytics codes return `404`; creation persistence failure returns `503`. Errors use `{"error":{"code","message","details"}}`. |
 | Meet peak request rates | Q-6 | Validate approximately 1,000 redirects/s and 10 creations/s (100:1) in a measured load test. These are targets, not current results. |
 | Meet endpoint latency | Q-7 | At the Q-6 workload, measure redirect P95 against 50 ms and creation P95 against 200 ms; do not claim success without benchmark evidence. |
 
@@ -38,39 +38,43 @@ The prototype-level requirements REQ-1–REQ-3 and REQ-9–REQ-10, and cross-cut
 
 **Open decisions retained without a silent default:**
 
-- Final JSON error-body fields and the public/base URL used to construct `short_url`.
-- Detailed destination-URL validation edge cases and the bounded code-collision retry limit.
+- Additional URL validation policy beyond absolute HTTP(S) URLs with a valid host and port.
 - Analytics freshness expectations and whether best-effort click loss is acceptable beyond this prototype baseline.
 - Benchmark duration, warm-up, environment, concurrency model, traffic distribution, and acceptable error rate. Before T-110, record these in the benchmark plan; separately report warm-cache, cold-cache, and Redis-failure runs.
 - Authentication, rate limiting, abuse controls, analytics retention, custom aliases, expiration, updates/deletion, and any collection of personal data are not part of the accepted baseline; obtain explicit approval before adding them.
 
 **Acceptance record:** Baseline scope and criteria above are marked accepted for implementation planning at the user's direction on 2026-10-09. This is not external stakeholder sign-off. The open decisions remain visible follow-ups and do not constitute evidence that code, automated tests, or Q-6/Q-7 performance targets have been completed.
 
+**T-104 contract decisions:** The public URL origin is supplied by required `URL_SHORTENER_PUBLIC_BASE_URL`; API errors use `{"error":{"code","message","details"}}`; code collisions retry at most five times. These choices finalize the corresponding baseline API details without changing product scope.
+
 #### T-102: Set Up Async Application and Configuration
 
-- **Status:** Implemented and validated on 2026-10-10. Automated tests cover startup/shutdown, configuration, and health behavior. The user reports manually validating with PostgreSQL and Redis running; exact commands and observed responses were not provided.
+- **Status:** Completed and validated successfully on 2026-10-10. Automated and human checks confirm liveness, readiness with both dependencies available, and not-ready behavior when PostgreSQL and Redis are unavailable.
 - **Description & scope:** Set up the Python/FastAPI application, dependency management, settings and secret loading, health/readiness behavior, async SQLAlchemy engine and request-scoped sessions, and reusable async Redis client. Configure bounded connection pools and operation timeouts.
 - **Dependencies:** T-101.
 - **AI-assistance point:** Ask AI for a minimal scaffold and lifecycle wiring that follows project conventions, including an explanation of resource cleanup and pool assumptions.
 - **Human validation / verification check:** Start the service and check health/readiness. Verify resources close on shutdown, invalid configuration fails explicitly, secrets are not logged or committed, and network I/O is not performed synchronously on the event loop.
-- **Implementation record:** App scaffold, environment settings, async resource lifecycle, `/health/live`, `/health/ready`, setup instructions, and focused tests are present. Defaults are 10 DB pooled connections plus up to 20 overflow and 50 Redis connections per process; these are configurable starting assumptions, not load-tested sizing. Readiness checks PostgreSQL and Redis and returns only status booleans; the PostgreSQL probe has a configurable two-second deadline. Liveness does not contact dependencies. The user reports successful live validation with PostgreSQL and Redis running; record exact commands/responses if available.
+- **Implementation record:** App scaffold, environment settings, async resource lifecycle, `/health/live`, `/health/ready`, setup instructions, and focused tests are present. Defaults are 10 DB pooled connections plus up to 20 overflow and 50 Redis connections per process; these are configurable starting assumptions, not load-tested sizing. Readiness checks PostgreSQL and Redis and returns only status booleans; the PostgreSQL probe has a configurable two-second deadline. Liveness does not contact dependencies. Human validation via `Invoke-RestMethod` returned `alive` from `/health/live`, `ready` with both dependency flags true, and `not_ready` with both flags false after dependency services were stopped.
 
 ### Phase 2 — Persist and serve short links
 
 #### T-103: Create Link and Click-Event Schema
 
+- **Status:** Completed and validated successfully on 2026-10-10. PostgreSQL schema inspection and constraint tests passed.
 - **Description & scope:** Define SQLAlchemy models and migrations for `short_links` and `click_events`: identity and foreign keys, unique code, destination, timestamps, aggregate click count, event UUID idempotency, and the `(link_id, clicked_at DESC)` index. PostgreSQL is the source of truth.
 - **Dependencies:** T-102.
 - **AI-assistance point:** Have AI draft typed models and migrations from the design and review the constraints, indexes, and migration reversibility.
 - **Human validation / verification check:** Apply migrations to a clean PostgreSQL database and inspect actual columns, constraints, and indexes. Verify duplicate codes and event IDs are rejected and the event foreign key is enforced.
-- **Implementation record:** Added typed SQLAlchemy models and an Alembic migration for the design's columns, unique code and event-ID keys, event foreign key, and descending `(link_id, clicked_at)` index. Added a nonnegative aggregate-count check. Upgrade and downgrade SQL render successfully offline. The user reports that PostgreSQL schema inspection and constraint tests were completed and looked good; exact commands and individual test details were not provided.
+- **Implementation record:** Added typed SQLAlchemy models and an Alembic migration for the design's columns, unique code and event-ID keys, event foreign key, and descending `(link_id, clicked_at)` index. Added a nonnegative aggregate-count check. Upgrade and downgrade SQL render successfully offline; 13 automated tests passed. Human validation applied revision `20261010_01` to the `url_shortener` PostgreSQL database and inspected `alembic_version`, both table definitions, columns, defaults, unique/check constraints, the event foreign key, and the descending `(link_id, clicked_at DESC)` index. Constraint checks confirmed duplicate `short_links.code` and `click_events.event_id` inserts were rejected and a nonexistent `click_events.link_id` was rejected by the FK. Test rows were rolled back.
 
 #### T-104: Implement Link-Creation API
 
+- **Status:** Completed and validated successfully on 2026-10-10. 27 automated tests pass; human validation confirmed creation, validation errors, database/cache behavior, and persistence across an API restart.
 - **Description & scope:** Implement `POST /api/v1/shorten`: validate an absolute HTTP(S) URL without fetching it, generate an 8-character random Base62 code, persist with bounded unique-collision retries, and return `201` with code, short URL, and creation time. Populate `short:v1:{code}` in Redis after commit as best effort.
 - **Dependencies:** T-103.
 - **AI-assistance point:** Generate request/response schemas, service and endpoint drafts, and focused tests; ask AI to explore malformed URLs, collision retries, and database/cache failures.
 - **Human validation / verification check:** Review URL validation, commit ordering, bounded retries, response/error formats, and behavior after Redis failure. Verify the mapping survives application restart.
+- **Implementation record:** Added typed request/response schemas, `POST /api/v1/shorten`, secure random 8-character Base62 code generation with five collision attempts, and best-effort Redis cache population only after PostgreSQL commit. Requires `URL_SHORTENER_PUBLIC_BASE_URL`; Redis cache TTL defaults to 3600 seconds. URL validation rejects malformed, non-HTTP(S), and hostless destinations. Database failures and exhausted collision retries return 503; validation errors return 422 using the consistent `error` envelope. Automated tests cover malformed URLs, code shape, collision retry/exhaustion, database flush/commit failure, commit-before-cache, and Redis cache failure. Human validation confirmed successful `201` creation, `422` for an FTP destination, PostgreSQL rows containing the expected mappings, Redis mappings with positive TTLs when available, and successful creation/persistence through a Redis outage. The user also confirmed the `QvULoBrt` database row was present before and after restarting the API process.
 
 #### T-105: Implement Cached Redirects and Database Fallback
 
@@ -176,4 +180,4 @@ The prompts and outputs below are examples for future implementation, not histor
 
 ## Validation Status
 
-The example commands in this breakdown are proposed for the corresponding service tasks. T-102 has been implemented and its focused tests passed; the user separately reported live validation with PostgreSQL and Redis running. T-103 models and reversible migration are implemented and unit/offline-SQL validated; the user reports successful PostgreSQL schema inspection and constraint tests. Exact commands and individual test details were not recorded. Load tests for Q-6/Q-7 have not been run; T-104 onward and the full service test suite remain outstanding.
+The example commands in this breakdown are proposed for the corresponding service tasks. T-102 is completed and validated: automated tests passed, and human checks confirmed live status, readiness with PostgreSQL and Redis available, and not-ready status when both dependencies were unavailable. T-103 is completed and validated: 13 automated tests passed, offline upgrade/downgrade SQL rendered, and human PostgreSQL inspection verified revision `20261010_01`, both table definitions, expected constraints and indexes; duplicate code/event IDs and an invalid foreign key were rejected, and test data was rolled back. T-104 is completed and validated with 27 automated tests passing; human validation confirmed successful API creation, invalid-scheme rejection, PostgreSQL persistence, Redis cache population with positive TTLs, successful creation while Redis was unavailable, and database persistence across an API restart. Load tests for Q-6/Q-7 have not been run; T-105 onward and full redirect/analytics integration remain outstanding.

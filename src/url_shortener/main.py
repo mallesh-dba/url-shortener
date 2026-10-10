@@ -1,7 +1,10 @@
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
@@ -11,6 +14,8 @@ from sqlalchemy.ext.asyncio import (
 
 from url_shortener.config import Settings, get_settings
 from url_shortener.health import router as health_router
+from url_shortener.link_routes import router as link_router
+from url_shortener.link_service import LinkPersistenceUnavailable
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -57,7 +62,41 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         version="0.1.0",
         lifespan=lifespan,
     )
+
+    @application.exception_handler(RequestValidationError)
+    async def request_validation_error(
+        request: Request,
+        error: RequestValidationError,
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=422,
+            content={
+                "error": {
+                    "code": "validation_error",
+                    "message": "Request validation failed",
+                    "details": jsonable_encoder(error.errors()),
+                }
+            },
+        )
+
+    @application.exception_handler(LinkPersistenceUnavailable)
+    async def persistence_error(
+        request: Request,
+        error: LinkPersistenceUnavailable,
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "error": {
+                    "code": "persistence_unavailable",
+                    "message": "Link persistence is temporarily unavailable",
+                    "details": None,
+                }
+            },
+        )
+
     application.include_router(health_router)
+    application.include_router(link_router)
     return application
 
 
