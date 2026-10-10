@@ -8,6 +8,7 @@ def valid_settings(**overrides: object) -> Settings:
     values: dict[str, object] = {
         "database_url": "postgresql+asyncpg://user:password@localhost/shortener",
         "redis_url": "redis://localhost:6379/0",
+        "public_base_url": "https://sho.rt",
     }
     values.update(overrides)
     return Settings(_env_file=None, **values)
@@ -28,6 +29,8 @@ def test_settings_validate_dependency_urls() -> None:
     [
         ("database_url", "postgresql://localhost/shortener"),
         ("redis_url", "http://localhost:6379"),
+        ("public_base_url", "https://sho.rt/path"),
+        ("public_base_url", "https://user:pass@sho.rt"),
         ("db_pool_size", 0),
         ("redis_max_connections", 0),
     ],
@@ -43,6 +46,7 @@ def test_settings_load_from_environment(monkeypatch: pytest.MonkeyPatch) -> None
         "postgresql+asyncpg://user:password@localhost/shortener",
     )
     monkeypatch.setenv("URL_SHORTENER_REDIS_URL", "rediss://localhost:6379/0")
+    monkeypatch.setenv("URL_SHORTENER_PUBLIC_BASE_URL", "https://sho.rt")
     monkeypatch.setenv("URL_SHORTENER_DB_POOL_SIZE", "7")
 
     settings = Settings(_env_file=None)

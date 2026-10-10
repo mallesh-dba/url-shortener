@@ -87,6 +87,7 @@ def test_liveness_does_not_require_dependency_connections() -> None:
         _env_file=None,
         database_url="postgresql+asyncpg://user:password@localhost/shortener",
         redis_url="redis://localhost:6379/0",
+        public_base_url="https://sho.rt",
     )
 
     with TestClient(create_app(settings)) as client:
@@ -101,6 +102,7 @@ def test_readiness_reports_dependency_status(monkeypatch: pytest.MonkeyPatch) ->
         _env_file=None,
         database_url="postgresql+asyncpg://user:password@localhost/shortener",
         redis_url="redis://localhost:6379/0",
+        public_base_url="https://sho.rt",
     )
     monkeypatch.setattr(health, "postgres_is_ready", AsyncMock(return_value=True))
     monkeypatch.setattr(health, "redis_is_ready", AsyncMock(return_value=True))
@@ -129,6 +131,7 @@ def test_lifespan_closes_database_and_redis_resources() -> None:
         _env_file=None,
         database_url="postgresql+asyncpg://user:password@localhost/shortener",
         redis_url="redis://localhost:6379/0",
+        public_base_url="https://sho.rt",
     )
     engine = Mock()
     engine.dispose = AsyncMock()
