@@ -97,7 +97,7 @@ The task is scheduled as part of the response handling; a process crash before t
 | Method and path | Behavior | Success / errors |
 |---|---|---|
 | `POST /api/v1/shorten` | Validate and create a short link. Request body: `{"destination_url":"https://example.com/path"}` | `201` with `code`, `short_url`, and `created_at`; `422` for invalid input; `503` if persistence is unavailable. `short_url` uses the configured `URL_SHORTENER_PUBLIC_BASE_URL` origin. |
-| `GET /{code}` | Resolve a short code and redirect. | `302` with `Location`; `404` for an unknown code. |
+| `GET /{code}` | Resolve a short code and redirect. | `302` with `Location`; `404` only after PostgreSQL confirms no mapping; `503` when the database lookup fails. |
 | `GET /api/v1/links/{code}/analytics` | Retrieve click analytics. | `200` with at least `code` and `clicks_total`; `404` for an unknown code. |
 
 Errors use the JSON shape `{"error":{"code":"...","message":"...","details":...}}`. Authentication and rate limiting are not specified by the assignment and must be decided before exposing the service publicly.
