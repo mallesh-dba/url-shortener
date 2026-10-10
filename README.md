@@ -67,6 +67,10 @@ recovery and safe `MINID` trimming:
 python -m url_shortener.analytics_worker
 ```
 
+If Redis is unavailable during startup, the worker logs the failure and retries
+consumer-group initialization using `URL_SHORTENER_ANALYTICS_RETRY_DELAY_SECONDS`
+instead of exiting.
+
 Each successful redirect schedules best-effort publication of a minimal click
 event to the configured Redis Stream. The worker stores events idempotently
 and increments `clicks_total` in the same PostgreSQL transaction, then
@@ -75,12 +79,16 @@ entry remains pending and can be reclaimed after
 `URL_SHORTENER_ANALYTICS_PENDING_IDLE_MS`. The worker logs consumer-group
 pending count and lag periodically.
 
-The worker trims only old entries before the oldest pending entry across all
-consumer groups (or each group's last-delivered entry when nothing is pending),
-and retains the recent configured stream window. A stalled pending entry can
-therefore keep the stream above its configured maximum rather than being
-deleted. Click tracking is best effort: a process failure before the redirect
-background task publishes can lose that click.
+The worker checks trimming every
+`URL_SHORTENER_ANALYTICS_STREAM_TRIM_INTERVAL_SECONDS` (default 60 seconds),
+not after each batch. It trims only old entries before the oldest pending entry
+across all consumer groups (or each group's last-delivered entry when nothing
+is pending), and retains the recent configured stream window. If the safe
+boundary has not advanced since the previous trim check, the worker skips
+fetching the retention window again. A stalled pending entry can therefore keep
+the stream above its configured maximum rather than being deleted. Click
+tracking is best effort: a process failure before the redirect background task
+publishes can lose that click.
 
 For a live smoke check, start the API and worker, create a fresh short link
 using the example above, and request it once. Then inspect the persisted event,

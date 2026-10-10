@@ -2,7 +2,7 @@ import asyncio
 from datetime import datetime, timedelta
 from functools import wraps
 from typing import Any, Callable, Coroutine
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 from uuid import UUID
 
 import pytest
@@ -10,6 +10,7 @@ from redis.exceptions import RedisError, ResponseError
 
 from url_shortener.analytics import (
     ClickAnalyticsWorker,
+    StreamTrimState,
     ensure_consumer_group,
     publish_click_event,
     trim_acknowledged_stream,
@@ -169,6 +170,31 @@ async def test_consumer_group_creation_ignores_only_existing_group_error() -> No
         id="0-0",
         mkstream=True,
     )
+
+
+@async_test
+async def test_worker_retries_consumer_group_creation_after_redis_failure() -> None:
+    session = FakeSession([])
+    redis_client = AsyncMock()
+    redis_client.xgroup_create.side_effect = [
+        RedisError("redis unavailable during startup"),
+        None,
+    ]
+    worker = make_worker(redis_client, session)
+    worker.recover_pending = AsyncMock(return_value=0)
+    worker.read_new = AsyncMock(side_effect=RuntimeError("stop test loop"))
+
+    with (
+        patch("url_shortener.analytics.asyncio.sleep", new_callable=AsyncMock) as sleep,
+        pytest.raises(RuntimeError, match="stop test loop"),
+    ):
+        await worker.run_forever()
+
+    assert redis_client.xgroup_create.await_count == 2
+    sleep.assert_awaited_once_with(
+        make_settings().analytics_retry_delay_seconds
+    )
+    worker.recover_pending.assert_awaited_once()
 
 
 @async_test
@@ -461,3 +487,56 @@ async def test_stream_trim_respects_pending_entries_in_every_consumer_group() ->
         minid="90-0",
         approximate=False,
     )
+
+
+@async_test
+async def test_unchanged_safe_boundary_skips_retention_window_fetch() -> None:
+    redis_client = AsyncMock()
+    redis_client.xlen.return_value = 120
+    redis_client.xinfo_groups.return_value = [
+        {
+            "name": "click-analytics:v1",
+            "last-delivered-id": "200-0",
+        }
+    ]
+    redis_client.xpending_range.return_value = [{"message_id": "150-0"}]
+    redis_client.xrevrange.return_value = [
+        (f"{200 - index}-0", {}) for index in range(100)
+    ]
+    redis_client.xtrim.return_value = 10
+    state = StreamTrimState()
+
+    await trim_acknowledged_stream(
+        redis_client,
+        "clicks:v1",
+        "click-analytics:v1",
+        100,
+        state,
+    )
+    await trim_acknowledged_stream(
+        redis_client,
+        "clicks:v1",
+        "click-analytics:v1",
+        100,
+        state,
+    )
+
+    assert redis_client.xrevrange.await_count == 1
+    assert redis_client.xtrim.await_count == 1
+
+
+@async_test
+async def test_worker_trimming_runs_on_interval_not_for_each_batch() -> None:
+    session = FakeSession([])
+    redis_client = AsyncMock()
+    redis_client.xlen.return_value = 0
+    worker = make_worker(redis_client, session)
+
+    assert await worker._process_messages([]) == 0
+    assert redis_client.xlen.await_count == 0
+
+    assert await worker.trim_if_due(100.0) == 0
+    assert await worker.trim_if_due(159.0) == 0
+    assert redis_client.xlen.await_count == 0
+    assert await worker.trim_if_due(160.0) == 0
+    assert redis_client.xlen.await_count == 1

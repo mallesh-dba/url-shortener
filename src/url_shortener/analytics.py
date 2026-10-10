@@ -2,6 +2,7 @@ import asyncio
 import logging
 import socket
 from collections.abc import Mapping
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Protocol
 from uuid import UUID, uuid4
@@ -169,11 +170,17 @@ def _text_value(value: object) -> str | None:
     return None
 
 
+@dataclass
+class StreamTrimState:
+    safe_boundary: str | None = None
+
+
 async def trim_acknowledged_stream(
     redis_client: ClickStreamClient,
     stream_name: str,
     group_name: str,
     max_length: int,
+    state: StreamTrimState | None = None,
 ) -> int:
     if await redis_client.xlen(stream_name) <= max_length:
         return 0
@@ -205,6 +212,9 @@ async def trim_acknowledged_stream(
         safe_boundaries.append(text_boundary)
     if not found_target_group or not safe_boundaries:
         return 0
+    safe_boundary = min(safe_boundaries, key=_stream_id_tuple)
+    if state is not None and safe_boundary == state.safe_boundary:
+        return 0
 
     recent_entries = await redis_client.xrevrange(
         stream_name,
@@ -218,17 +228,20 @@ async def trim_acknowledged_stream(
     if retention_boundary is None:
         return 0
     trim_boundary = min(
-        *safe_boundaries,
+        safe_boundary,
         retention_boundary,
         key=_stream_id_tuple,
     )
     if _stream_id_tuple(trim_boundary) == (0, 0):
         return 0
-    return await redis_client.xtrim(
+    trimmed = await redis_client.xtrim(
         stream_name,
         minid=trim_boundary,
         approximate=False,
     )
+    if state is not None:
+        state.safe_boundary = safe_boundary
+    return trimmed
 
 
 class ClickAnalyticsWorker:
@@ -248,6 +261,8 @@ class ClickAnalyticsWorker:
             f"{socket.gethostname()}-{uuid4().hex}"
         )
         self.pending_cursor = "0-0"
+        self.trim_state = StreamTrimState()
+        self.next_trim_at: float | None = None
 
     async def persist_and_ack(
         self,
@@ -306,16 +321,27 @@ class ClickAnalyticsWorker:
                     "Click event processing failed; stream entry remains pending",
                     extra={"stream_entry_id": stream_id},
                 )
-        try:
-            await trim_acknowledged_stream(
-                self.redis_client,
-                self.stream_name,
-                self.group_name,
-                self.settings.analytics_stream_max_length,
-            )
-        except (RedisError, TimeoutError):
-            logger.exception("Safe click stream trimming failed")
         return processed
+
+    async def trim_if_due(self, now: float) -> int:
+        if self.next_trim_at is None:
+            self.next_trim_at = (
+                now + self.settings.analytics_stream_trim_interval_seconds
+            )
+            return 0
+        if now < self.next_trim_at:
+            return 0
+        trimmed = await trim_acknowledged_stream(
+            self.redis_client,
+            self.stream_name,
+            self.group_name,
+            self.settings.analytics_stream_max_length,
+            self.trim_state,
+        )
+        self.next_trim_at = (
+            now + self.settings.analytics_stream_trim_interval_seconds
+        )
+        return trimmed
 
     async def recover_pending(self) -> int:
         next_cursor, messages, _ = await self.redis_client.xautoclaim(
@@ -368,17 +394,21 @@ class ClickAnalyticsWorker:
         )
 
     async def run_forever(self) -> None:
-        await ensure_consumer_group(
-            self.redis_client,
-            self.stream_name,
-            self.group_name,
-        )
+        consumer_group_ready = False
         next_lag_report = asyncio.get_running_loop().time()
         while True:
             try:
+                if not consumer_group_ready:
+                    await ensure_consumer_group(
+                        self.redis_client,
+                        self.stream_name,
+                        self.group_name,
+                    )
+                    consumer_group_ready = True
                 await self.recover_pending()
                 await self.read_new()
                 now = asyncio.get_running_loop().time()
+                await self.trim_if_due(now)
                 if now >= next_lag_report:
                     await self.report_lag()
                     next_lag_report = now + (
