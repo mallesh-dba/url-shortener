@@ -50,7 +50,7 @@ Creation errors use `{"error":{"code":"...","message":"...","details":...}}`.
 Follow a returned short URL to test redirect behavior:
 
 ```powershell
-Invoke-WebRequest -Uri $response.short_url -MaximumRedirection 0
+curl.exe -i $response.short_url
 ```
 
 The redirect endpoint returns `302` with the destination in the `Location`
