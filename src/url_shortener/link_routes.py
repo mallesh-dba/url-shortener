@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Request, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from url_shortener.analytics import publish_click_event
 from url_shortener.config import Settings
 from url_shortener.database import get_session
 from url_shortener.link_service import (
@@ -23,9 +24,10 @@ router = APIRouter(tags=["links"])
 async def redirect_to_destination(
     code: str,
     request: Request,
+    background_tasks: BackgroundTasks,
     session: AsyncSession = Depends(get_session),
 ) -> RedirectResponse:
-    destination_url, _link_id = await find_short_link(
+    destination_url, link_id = await find_short_link(
         session,
         request.app.state.redis,
         code,
@@ -33,6 +35,14 @@ async def redirect_to_destination(
     )
     if destination_url is None:
         raise ShortLinkNotFound
+    if link_id is None:
+        raise RuntimeError("Resolved short link is missing its database ID")
+    background_tasks.add_task(
+        publish_click_event,
+        request.app.state.redis,
+        link_id,
+        request.app.state.settings.analytics_stream_name,
+    )
     return RedirectResponse(
         destination_url,
         status_code=status.HTTP_302_FOUND,

@@ -147,10 +147,12 @@ For high event volume, time partitioning and retention/archival can be introduce
 
 ### Click event stream and worker
 
-- FastAPI `BackgroundTasks` publishes a minimal event (`event_id`, `code` or `link_id`, `clicked_at`) to a Redis Stream after the redirect response is sent.
+- FastAPI `BackgroundTasks` publishes a minimal event (`event_id`, `link_id`, `clicked_at`) to a Redis Stream after the redirect response is sent.
 - A separate async worker consumes through a Redis consumer group. It commits the event insert and counter increment in a single PostgreSQL transaction, then acknowledges the stream item.
+- The worker uses `XAUTOCLAIM` and `XTRIM MINID`, requiring Redis 6.2 or newer.
 - If a worker fails before commit, the item remains pending for retry. The unique `event_id` prevents duplicate increments on retry. Configure pending-entry recovery and monitor stream lag.
-- Define a retention and trimming policy before production. Do not trim unprocessed/pending events. Redis persistence and replication should be configured to match the required durability; Redis is not a substitute for the PostgreSQL record.
+- Trim only an acknowledged prefix, bounded by the oldest pending entry and the configured recent-entry window. Never trim unprocessed or pending events; a stalled entry may therefore cause the stream to exceed its target maximum length. This prototype policy is count-based, and production retention should be reviewed against analytics and Redis durability requirements.
+- Redis persistence and replication should be configured to match the required durability; Redis is not a substitute for the PostgreSQL record.
 - Monitor background publish failures, pending event count, processing lag, database transaction failures, and rejected/invalid destination URLs.
 
 ## 7. Runtime and Failure Handling

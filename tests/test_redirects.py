@@ -81,6 +81,22 @@ def test_redirect_cache_hit_skips_database_lookup() -> None:
     redis_client.set.assert_not_awaited()
 
 
+def test_redirect_publishes_a_click_event_in_background() -> None:
+    link = make_link()
+    session = make_session(None)
+    redis_client = AsyncMock()
+    redis_client.get.return_value = cached_mapping(link)
+
+    response = request_redirect(session, redis_client)
+
+    assert response.status_code == 302
+    redis_client.xadd.assert_awaited_once()
+    stream, fields = redis_client.xadd.await_args.args
+    assert stream == "clicks:v1"
+    assert fields["link_id"] == str(link.id)
+    assert set(fields) == {"event_id", "link_id", "clicked_at"}
+
+
 def test_redirect_cache_miss_reads_database_and_populates_cache() -> None:
     link = make_link()
     session = make_session(link)
