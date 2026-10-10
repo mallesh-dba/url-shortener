@@ -63,6 +63,7 @@ The prototype-level requirements REQ-1–REQ-3 and REQ-9–REQ-10, and cross-cut
 - **Dependencies:** T-102.
 - **AI-assistance point:** Have AI draft typed models and migrations from the design and review the constraints, indexes, and migration reversibility.
 - **Human validation / verification check:** Apply migrations to a clean PostgreSQL database and inspect actual columns, constraints, and indexes. Verify duplicate codes and event IDs are rejected and the event foreign key is enforced.
+- **Implementation record:** Added typed SQLAlchemy models and an Alembic migration for the design's columns, unique code and event-ID keys, event foreign key, and descending `(link_id, clicked_at)` index. Added a nonnegative aggregate-count check. Upgrade and downgrade SQL render successfully offline. The user reports that PostgreSQL schema inspection and constraint tests were completed and looked good; exact commands and individual test details were not provided.
 
 #### T-104: Implement Link-Creation API
 
@@ -175,4 +176,4 @@ The prompts and outputs below are examples for future implementation, not histor
 
 ## Validation Status
 
-The example commands in this breakdown are proposed for the corresponding future service tasks. T-102 has been implemented and its focused tests were run with `python -m pytest -q`: 11 passed, with one Starlette/httpx deprecation warning. Live PostgreSQL/Redis integration tests and load tests for Q-6/Q-7 have not been run; the remaining core service implementation and its test suite are still outstanding.
+The example commands in this breakdown are proposed for the corresponding service tasks. T-102 has been implemented and its focused tests passed; the user separately reported live validation with PostgreSQL and Redis running. T-103 models and reversible migration are implemented and unit/offline-SQL validated; the user reports successful PostgreSQL schema inspection and constraint tests. Exact commands and individual test details were not recorded. Load tests for Q-6/Q-7 have not been run; T-104 onward and the full service test suite remain outstanding.
