@@ -25,6 +25,15 @@ class Settings(BaseSettings):
     redis_connect_timeout_seconds: Annotated[float, Field(gt=0)] = 2
     redis_socket_timeout_seconds: Annotated[float, Field(gt=0)] = 2
     link_cache_ttl_seconds: Annotated[int, Field(gt=0)] = 3600
+    analytics_stream_name: str = "clicks:v1"
+    analytics_consumer_group: str = "click-analytics:v1"
+    analytics_batch_size: Annotated[int, Field(gt=0)] = 100
+    analytics_block_ms: Annotated[int, Field(gt=0)] = 1000
+    analytics_pending_idle_ms: Annotated[int, Field(gt=0)] = 60_000
+    analytics_stream_max_length: Annotated[int, Field(gt=0)] = 100_000
+    analytics_stream_trim_interval_seconds: Annotated[int, Field(gt=0)] = 60
+    analytics_lag_log_interval_seconds: Annotated[int, Field(gt=0)] = 60
+    analytics_retry_delay_seconds: Annotated[float, Field(gt=0)] = 1
 
     @field_validator("database_url")
     @classmethod
