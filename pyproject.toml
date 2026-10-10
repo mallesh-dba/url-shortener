@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "url-shortener"
+version = "0.1.0"
+description = "Scalable URL shortener service"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "asyncpg>=0.29,<1",
+    "fastapi>=0.115,<1",
+    "pydantic-settings>=2.5,<3",
+    "redis>=5,<7",
+    "sqlalchemy[asyncio]>=2.0,<3",
+    "uvicorn[standard]>=0.30,<1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "httpx>=0.27,<1",
+    "httpx2>=2,<3",
+    "pytest>=8,<9",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
