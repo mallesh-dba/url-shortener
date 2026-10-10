@@ -1,9 +1,15 @@
 from fastapi import APIRouter, Depends, Request, status
+from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from url_shortener.config import Settings
 from url_shortener.database import get_session
-from url_shortener.link_service import create_short_link, make_short_url
+from url_shortener.link_service import (
+    ShortLinkNotFound,
+    create_short_link,
+    find_short_link,
+    make_short_url,
+)
 from url_shortener.models import ShortLink
 from url_shortener.schemas import (
     ShortLinkCreateRequest,
@@ -11,6 +17,26 @@ from url_shortener.schemas import (
 )
 
 router = APIRouter(tags=["links"])
+
+
+@router.get("/{code}", response_class=RedirectResponse)
+async def redirect_to_destination(
+    code: str,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> RedirectResponse:
+    destination_url, _link_id = await find_short_link(
+        session,
+        request.app.state.redis,
+        code,
+        request.app.state.settings,
+    )
+    if destination_url is None:
+        raise ShortLinkNotFound
+    return RedirectResponse(
+        destination_url,
+        status_code=status.HTTP_302_FOUND,
+    )
 
 
 @router.post(

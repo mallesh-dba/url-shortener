@@ -15,7 +15,11 @@ from sqlalchemy.ext.asyncio import (
 from url_shortener.config import Settings, get_settings
 from url_shortener.health import router as health_router
 from url_shortener.link_routes import router as link_router
-from url_shortener.link_service import LinkPersistenceUnavailable
+from url_shortener.link_service import (
+    LinkLookupUnavailable,
+    LinkPersistenceUnavailable,
+    ShortLinkNotFound,
+)
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -90,6 +94,38 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "error": {
                     "code": "persistence_unavailable",
                     "message": "Link persistence is temporarily unavailable",
+                    "details": None,
+                }
+            },
+        )
+
+    @application.exception_handler(LinkLookupUnavailable)
+    async def lookup_error(
+        request: Request,
+        error: LinkLookupUnavailable,
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "error": {
+                    "code": "lookup_unavailable",
+                    "message": "Link lookup is temporarily unavailable",
+                    "details": None,
+                }
+            },
+        )
+
+    @application.exception_handler(ShortLinkNotFound)
+    async def not_found(
+        request: Request,
+        error: ShortLinkNotFound,
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=404,
+            content={
+                "error": {
+                    "code": "link_not_found",
+                    "message": "Short link was not found",
                     "details": None,
                 }
             },

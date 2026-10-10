@@ -38,7 +38,7 @@ probe has a configurable two-second deadline by default
 Create a short link with:
 
 ```powershell
-Invoke-RestMethod -Method Post `
+$response = Invoke-RestMethod -Method Post `
   -Uri http://127.0.0.1:8000/api/v1/shorten `
   -ContentType application/json `
   -Body '{"destination_url":"https://example.com/path"}'
@@ -46,6 +46,16 @@ Invoke-RestMethod -Method Post `
 
 The API returns the generated code, its public short URL, and creation time.
 Creation errors use `{"error":{"code":"...","message":"...","details":...}}`.
+
+Follow a returned short URL to test redirect behavior:
+
+```powershell
+curl.exe -i $response.short_url
+```
+
+The redirect endpoint returns `302` with the destination in the `Location`
+header. An unknown code returns `404` only after PostgreSQL confirms it does
+not exist; Redis outages fall back to PostgreSQL.
 
 Run the current tests with:
 
