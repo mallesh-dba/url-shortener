@@ -240,7 +240,9 @@ async def trim_acknowledged_stream(
         approximate=False,
     )
     if state is not None:
-        state.safe_boundary = safe_boundary
+        state.safe_boundary = (
+            safe_boundary if trim_boundary == safe_boundary else None
+        )
     return trimmed
 
 

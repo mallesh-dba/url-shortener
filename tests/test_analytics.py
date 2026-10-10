@@ -499,7 +499,7 @@ async def test_unchanged_safe_boundary_skips_retention_window_fetch() -> None:
             "last-delivered-id": "200-0",
         }
     ]
-    redis_client.xpending_range.return_value = [{"message_id": "150-0"}]
+    redis_client.xpending_range.return_value = [{"message_id": "90-0"}]
     redis_client.xrevrange.return_value = [
         (f"{200 - index}-0", {}) for index in range(100)
     ]
@@ -523,6 +523,46 @@ async def test_unchanged_safe_boundary_skips_retention_window_fetch() -> None:
 
     assert redis_client.xrevrange.await_count == 1
     assert redis_client.xtrim.await_count == 1
+
+
+@async_test
+async def test_retention_limited_trim_rechecks_when_window_advances() -> None:
+    redis_client = AsyncMock()
+    redis_client.xlen.return_value = 120
+    redis_client.xinfo_groups.return_value = [
+        {
+            "name": "click-analytics:v1",
+            "last-delivered-id": "200-0",
+        }
+    ]
+    redis_client.xpending_range.return_value = [{"message_id": "150-0"}]
+    redis_client.xrevrange.side_effect = [
+        [(f"{200 - index}-0", {}) for index in range(100)],
+        [(f"{220 - index}-0", {}) for index in range(100)],
+    ]
+    redis_client.xtrim.side_effect = [10, 20]
+    state = StreamTrimState()
+
+    first_trimmed = await trim_acknowledged_stream(
+        redis_client,
+        "clicks:v1",
+        "click-analytics:v1",
+        100,
+        state,
+    )
+    second_trimmed = await trim_acknowledged_stream(
+        redis_client,
+        "clicks:v1",
+        "click-analytics:v1",
+        100,
+        state,
+    )
+
+    assert (first_trimmed, second_trimmed) == (10, 20)
+    assert state.safe_boundary is None
+    assert redis_client.xrevrange.await_count == 2
+    assert redis_client.xtrim.await_args_list[0].kwargs["minid"] == "101-0"
+    assert redis_client.xtrim.await_args_list[1].kwargs["minid"] == "121-0"
 
 
 @async_test
