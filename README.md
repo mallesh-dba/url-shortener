@@ -34,6 +34,10 @@ external services. `GET /health/ready` checks PostgreSQL and Redis and returns
 dependency status without exposing connection details. The PostgreSQL readiness
 probe has a configurable two-second deadline by default
 (`URL_SHORTENER_DB_READINESS_TIMEOUT_SECONDS`).
+The API exposes low-cardinality Prometheus metrics at `/metrics`. Keep this
+endpoint on a trusted network; the route does not include short codes,
+destination URLs, client IP addresses, or user agents in metric labels or
+request logs.
 
 Create a short link with:
 
@@ -69,6 +73,16 @@ The API reads the persisted aggregate from PostgreSQL. Since the analytics
 worker updates it asynchronously from the Redis Stream, it may not include the
 most recent redirects until those events are processed. It does not synchronously
 count `click_events` on each request.
+
+The analytics worker exposes its Prometheus metrics on the configured
+`URL_SHORTENER_ANALYTICS_METRICS_HOST` and
+`URL_SHORTENER_ANALYTICS_METRICS_PORT` (default `127.0.0.1:9101`). The worker
+serves scrape output at `http://127.0.0.1:9101/` by default. It reports
+pending-event count and stream lag; a lag value of `-1` means the Redis server
+did not provide a lag value. The metrics include request latency/status, cache
+outcomes, code-collision retries, database pool utilization, event publication
+failures, and worker processing/retry health. Keep the worker metrics listener
+private as well.
 
 ## Click analytics worker
 
@@ -134,3 +148,8 @@ Database and Redis pool settings are per application process. Size them against
 the database/server connection budgets multiplied by the number of deployed
 processes; the example values are starting defaults, not load-tested capacity
 recommendations.
+
+This baseline is not ready for direct public exposure: authentication,
+rate-limiting, abuse reporting, and administrative controls remain product and
+deployment decisions. Add those controls at the application or trusted gateway
+before making creation or redirect endpoints publicly available.

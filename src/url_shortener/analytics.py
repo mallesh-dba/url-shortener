@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from typing import Protocol
 from uuid import UUID, uuid4
 
+from prometheus_client import start_http_server
 from redis.exceptions import RedisError, ResponseError
 from sqlalchemy import update
 from sqlalchemy.dialects.postgresql import insert
@@ -15,6 +16,16 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from url_shortener.config import Settings, get_settings
 from url_shortener.models import ClickEvent, ShortLink
+from url_shortener.observability import (
+    ANALYTICS_PENDING_EVENTS,
+    ANALYTICS_PROCESSING_FAILURES,
+    ANALYTICS_REDIS_FAILURES,
+    ANALYTICS_STREAM_LAG,
+    CLICK_EVENT_PUBLISH_FAILURES,
+    METRICS_REGISTRY,
+    configure_structured_logging,
+    observe_database_pool,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -101,10 +112,12 @@ async def publish_click_event(
     }
     try:
         await redis_client.xadd(stream_name, fields)
-    except (RedisError, TimeoutError):
+    except (RedisError, OSError, TimeoutError):
+        CLICK_EVENT_PUBLISH_FAILURES.inc()
         logger.warning(
             "Click event publication failed",
             exc_info=True,
+            extra={"operation": "publish", "outcome": "error"},
         )
 
 
@@ -319,9 +332,14 @@ class ClickAnalyticsWorker:
                 ValueError,
                 TypeError,
             ):
+                ANALYTICS_PROCESSING_FAILURES.inc()
                 logger.exception(
                     "Click event processing failed; stream entry remains pending",
-                    extra={"stream_entry_id": stream_id},
+                    extra={
+                        "operation": "process",
+                        "outcome": "error",
+                        "stream_entry_id": stream_id,
+                    },
                 )
         return processed
 
@@ -387,11 +405,19 @@ class ClickAnalyticsWorker:
         if group_info is None:
             logger.warning("Analytics consumer group is missing")
             return
+        pending_count = _mapping_value(group_info, "pending")
+        if isinstance(pending_count, int) and not isinstance(pending_count, bool):
+            ANALYTICS_PENDING_EVENTS.set(pending_count)
+        stream_lag = _mapping_value(group_info, "lag")
+        if isinstance(stream_lag, int) and not isinstance(stream_lag, bool):
+            ANALYTICS_STREAM_LAG.set(stream_lag)
+        else:
+            ANALYTICS_STREAM_LAG.set(-1)
         logger.info(
             "Analytics stream lag",
             extra={
-                "pending_count": _mapping_value(group_info, "pending"),
-                "lag": _mapping_value(group_info, "lag"),
+                "pending_count": pending_count,
+                "lag": stream_lag,
             },
         )
 
@@ -416,7 +442,8 @@ class ClickAnalyticsWorker:
                     next_lag_report = now + (
                         self.settings.analytics_lag_log_interval_seconds
                     )
-            except (RedisError, TimeoutError):
+            except (RedisError, OSError, TimeoutError):
+                ANALYTICS_REDIS_FAILURES.inc()
                 logger.exception("Analytics worker Redis operation failed")
                 await asyncio.sleep(
                     self.settings.analytics_retry_delay_seconds
@@ -427,6 +454,7 @@ async def run_worker(settings: Settings | None = None) -> None:
     from redis.asyncio import Redis
     from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+    configure_structured_logging()
     current_settings = settings or get_settings()
     engine = create_async_engine(
         current_settings.database_url.get_secret_value(),
@@ -436,6 +464,10 @@ async def run_worker(settings: Settings | None = None) -> None:
         connect_args={"timeout": current_settings.db_connect_timeout_seconds},
         pool_pre_ping=True,
     )
+    observe_database_pool(
+        engine,
+        current_settings.db_pool_size + current_settings.db_max_overflow,
+    )
     redis_client = Redis.from_url(
         current_settings.redis_url.get_secret_value(),
         max_connections=current_settings.redis_max_connections,
@@ -443,7 +475,13 @@ async def run_worker(settings: Settings | None = None) -> None:
         socket_timeout=current_settings.redis_socket_timeout_seconds,
         decode_responses=True,
     )
+    metrics_server = None
     try:
+        metrics_server, _ = start_http_server(
+            current_settings.analytics_metrics_port,
+            addr=current_settings.analytics_metrics_host,
+            registry=METRICS_REGISTRY,
+        )
         factory: async_sessionmaker[AsyncSession] = async_sessionmaker(
             engine,
             class_=AsyncSession,
@@ -455,4 +493,9 @@ async def run_worker(settings: Settings | None = None) -> None:
         try:
             await redis_client.aclose()
         finally:
-            await engine.dispose()
+            try:
+                await engine.dispose()
+            finally:
+                if metrics_server is not None:
+                    metrics_server.shutdown()
+                    metrics_server.server_close()

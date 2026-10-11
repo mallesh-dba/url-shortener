@@ -26,14 +26,14 @@ async def postgres_is_ready(
         async with asyncio.timeout(timeout_seconds):
             async with engine.connect():
                 return True
-    except (SQLAlchemyError, TimeoutError):
+    except (SQLAlchemyError, OSError, TimeoutError):
         return False
 
 
 async def redis_is_ready(redis_client: RedisProbe) -> bool:
     try:
         return bool(await redis_client.ping())
-    except (RedisError, TimeoutError):
+    except (RedisError, OSError, TimeoutError):
         return False
 
 
