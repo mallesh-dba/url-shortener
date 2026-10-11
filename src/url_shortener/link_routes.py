@@ -9,15 +9,32 @@ from url_shortener.link_service import (
     ShortLinkNotFound,
     create_short_link,
     find_short_link,
+    get_link_analytics,
     make_short_url,
 )
 from url_shortener.models import ShortLink
 from url_shortener.schemas import (
+    LinkAnalyticsResponse,
     ShortLinkCreateRequest,
     ShortLinkCreateResponse,
 )
 
 router = APIRouter(tags=["links"])
+
+
+@router.get(
+    "/api/v1/links/{code}/analytics",
+    response_model=LinkAnalyticsResponse,
+)
+async def get_link_analytics_endpoint(
+    code: str,
+    session: AsyncSession = Depends(get_session),
+) -> LinkAnalyticsResponse:
+    analytics_code, clicks_total = await get_link_analytics(session, code)
+    return LinkAnalyticsResponse(
+        code=analytics_code,
+        clicks_total=clicks_total,
+    )
 
 
 @router.get("/{code}", response_class=RedirectResponse)

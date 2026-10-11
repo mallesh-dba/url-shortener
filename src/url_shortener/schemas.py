@@ -1,7 +1,7 @@
 from datetime import datetime
 from urllib.parse import urlsplit
 
-from pydantic import AnyHttpUrl, BaseModel, ConfigDict, field_validator
+from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field, field_validator
 
 
 class ShortLinkCreateRequest(BaseModel):
@@ -36,3 +36,8 @@ class ShortLinkCreateResponse(BaseModel):
     code: str
     short_url: AnyHttpUrl
     created_at: datetime
+
+
+class LinkAnalyticsResponse(BaseModel):
+    code: str
+    clicks_total: int = Field(ge=0)
