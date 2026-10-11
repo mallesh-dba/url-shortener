@@ -57,6 +57,19 @@ The redirect endpoint returns `302` with the destination in the `Location`
 header. An unknown code returns `404` only after PostgreSQL confirms it does
 not exist; Redis outages fall back to PostgreSQL.
 
+Retrieve the aggregate click count for a short code:
+
+```powershell
+Invoke-RestMethod `
+  -Uri "http://127.0.0.1:8000/api/v1/links/$($response.code)/analytics"
+```
+
+The response contains `code` and `clicks_total`; an unknown code returns `404`.
+The API reads the persisted aggregate from PostgreSQL. Since the analytics
+worker updates it asynchronously from the Redis Stream, it may not include the
+most recent redirects until those events are processed. It does not synchronously
+count `click_events` on each request.
+
 ## Click analytics worker
 
 Run the worker in a separate terminal from the API after applying the database

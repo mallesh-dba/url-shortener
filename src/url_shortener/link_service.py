@@ -38,6 +38,27 @@ class ShortLinkNotFound(Exception):
     pass
 
 
+async def get_link_analytics(
+    session: AsyncSession,
+    code: str,
+) -> tuple[str, int]:
+    try:
+        result = await session.execute(
+            select(ShortLink.code, ShortLink.clicks_total).where(
+                ShortLink.code == code
+            )
+        )
+        link_analytics = result.one_or_none()
+    except (SQLAlchemyError, OSError, TimeoutError) as error:
+        await _rollback(session)
+        logger.error("Short-link analytics lookup failed")
+        raise LinkLookupUnavailable from error
+
+    if link_analytics is None:
+        raise ShortLinkNotFound
+    return link_analytics.code, link_analytics.clicks_total
+
+
 def generate_short_code() -> str:
     return "".join(
         secrets.choice(BASE62_ALPHABET)
