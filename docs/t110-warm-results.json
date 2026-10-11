@@ -1,0 +1,143 @@
+{
+  "run_id": "bench-aad4840e769745baa410aaaaca4c312d",
+  "cache_mode": "warm",
+  "environment": {
+    "host": "Windows-10-10.0.19045-SP0",
+    "python": "3.12.2",
+    "logical_cpus": 4,
+    "api": "http://127.0.0.1:8000",
+    "database_pool_capacity": 30,
+    "redis_max_connections": 50,
+    "api_metrics_url": "http://127.0.0.1:9100/",
+    "worker_metrics_url": "http://127.0.0.1:9101/",
+    "warmup_seconds": 15,
+    "measurement_seconds": 60,
+    "concurrency": 500
+  },
+  "target": {
+    "redirects_per_second": 1000,
+    "creations_per_second": 10,
+    "redirect_p95_ms": 50,
+    "creation_p95_ms": 200
+  },
+  "measured": {
+    "redirect": {
+      "completed": 2077,
+      "requests_per_second": 34.62,
+      "status_counts": {
+        "302": 2077
+      },
+      "errors": {},
+      "client_queue_delay_ms": {
+        "p95": 61.0,
+        "max": 358.0
+      },
+      "latency_ms": {
+        "p50": 1449.97,
+        "p95": 5811.36,
+        "p99": 9457.34,
+        "max": 25714.15
+      }
+    },
+    "creation": {
+      "completed": 595,
+      "requests_per_second": 9.92,
+      "status_counts": {
+        "201": 595
+      },
+      "errors": {},
+      "client_queue_delay_ms": {
+        "p95": 56.0,
+        "max": 347.0
+      },
+      "latency_ms": {
+        "p50": 1450.08,
+        "p95": 5754.93,
+        "p99": 8687.57,
+        "max": 11797.38
+      }
+    },
+    "outside_measurement_window": {
+      "redirect": {
+        "warmup_completed": 718,
+        "warmup_status_counts": {
+          "302": 718
+        },
+        "tail_completed": 2,
+        "tail_status_counts": {
+          "302": 2
+        }
+      },
+      "creation": {
+        "warmup_completed": 150,
+        "warmup_status_counts": {
+          "201": 150
+        },
+        "tail_completed": 0,
+        "tail_status_counts": {}
+      }
+    },
+    "redirect_to_creation_ratio": 3.49,
+    "client_scheduler_lateness_p95_ms": 46.0,
+    "telemetry_sample_count": {
+      "api": 448,
+      "worker": 448,
+      "postgres_probe_ms": 448,
+      "redis_probe_ms": 448
+    },
+    "telemetry_errors": [],
+    "dependency_probe_latency_ms": {
+      "postgres_select_1": {
+        "p50": 4.03,
+        "p95": 275.68,
+        "max": 677.82
+      },
+      "redis_ping": {
+        "p50": 1.09,
+        "p95": 63.32,
+        "max": 157.01
+      }
+    },
+    "service_histogram_p95_ms": {
+      "redirect": 5.0,
+      "creation": 100.0
+    },
+    "cache_lookup_delta": {
+      "hit": 2797.0,
+      "miss": 0.0,
+      "error": 0
+    },
+    "api_pool_checked_out_sampled_peak": 1.0,
+    "api_pool_capacity": 30.0,
+    "worker_pool_checked_out_sampled_peak": 1.0,
+    "worker_pool_capacity": 30.0,
+    "process_lifetime_pool_high_water": {
+      "api": 9.0,
+      "worker": 1.0
+    },
+    "analytics": {
+      "expected_events": 2797,
+      "persisted_events": 2797,
+      "acknowledged_events": 1390,
+      "acknowledged_by_load_completion": 1390,
+      "drain_seconds": 120.17,
+      "post_load_drain_events_per_second": 0.0,
+      "worker_stream_lag_after": 0.0,
+      "worker_stream_lag_peak": 0,
+      "worker_pending_after": 0.0,
+      "worker_pending_peak": 1.0
+    }
+  },
+  "acceptance": {
+    "redirect_rate_met": false,
+    "creation_rate_met": true,
+    "redirect_creation_ratio_met": false,
+    "redirect_p95_met": false,
+    "creation_p95_met": false,
+    "all_redirects_succeeded": true,
+    "all_creations_succeeded": true,
+    "telemetry_complete": true,
+    "analytics_drained": false,
+    "cleanup_done": false
+  }
+}

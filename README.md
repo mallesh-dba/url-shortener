@@ -88,8 +88,9 @@ The analytics worker exposes its Prometheus metrics on the configured
 serves scrape output at `http://127.0.0.1:9101/` by default. It reports
 pending-event count and stream lag; a lag value of `-1` means the Redis server
 did not provide a lag value. The metrics include request latency/status, cache
-outcomes, code-collision retries, database pool utilization, event publication
-failures, and worker processing/retry health. Keep the worker metrics listener
+outcomes, code-collision retries, current and high-water database pool
+utilization, event publication failures, acknowledged event throughput, and
+worker processing/retry health. Keep the worker metrics listener
 private as well: use a private interface and monitoring-network firewall
 allowlist for remote scraping, and do not publish it through the public API
 gateway.
@@ -165,6 +166,85 @@ The integration test creates a short link, checks PostgreSQL persistence,
 Redis cache and stream publication, redirect behavior, and analytics/error
 contracts. It uses a unique stream and removes its test link/cache/stream data
 afterward. The test requires the schema migration to be applied.
+
+## Capacity and latency benchmark
+
+The reproducible fixed-rate benchmark uses `httpx` from the development
+dependencies and writes a JSON report. It refuses non-local API targets unless
+`--allow-remote` is explicitly supplied. A local-only run is supported and is
+useful for exercising the harness, checking telemetry/cleanup, and establishing
+a machine-specific baseline. It is diagnostic only: local hardware,
+co-located services, and a co-located load generator do not establish deployed
+capacity or satisfy Q-6/Q-7 acceptance. Keep PostgreSQL, Redis, the API, and the
+analytics worker running, apply migrations, and confirm the API and worker
+metrics endpoints are reachable at `127.0.0.1:9100` and `127.0.0.1:9101`.
+Avoid unrelated traffic during the measurement. Never run a capacity test
+against production.
+
+From the project root, after starting the local services and applying
+migrations, run the warm-cache workload (15-second warm-up, then 60-second
+measurement at 1,000 redirects/s and 10 creations/s):
+
+```powershell
+python scripts\load_test.py --cache-mode warm `
+  --duration-seconds 60 --warmup-seconds 15 `
+  --redirects-per-second 1000 --creations-per-second 10 `
+  --concurrency 500 --output docs\t110-warm-results.json
+```
+
+Then run the cold-cache workload:
+
+```powershell
+python scripts\load_test.py --cache-mode cold `
+  --duration-seconds 60 --warmup-seconds 15 `
+  --redirects-per-second 1000 --creations-per-second 10 `
+  --concurrency 500 --output docs\t110-cold-results.json
+```
+
+The cold-cache run seeds one mapping per scheduled redirect so each redirect
+is a PostgreSQL-backed miss rather than warming into a repeated hit. Benchmark
+fixtures are isolated by a unique destination marker and are removed after the
+worker has persisted and acknowledged all expected events. If analytics does
+not drain before the configured timeout, the report says cleanup was not
+completed and leaves the records intact for investigation. Reports include
+separate client and API histogram latencies, response/error counts, actual
+rates and ratio, cache outcomes, database pool high-water mark, PostgreSQL and
+Redis probe latency, worker lag/pending metrics, acknowledged event
+throughput, environment, warm-up, duration, and concurrency.
+
+If a report has `"cleanup_done": false`, do not start another load run yet.
+Keep PostgreSQL and Redis available, then run cleanup-only once for that
+report's `run_id` (the unique `bench-...` marker), for example:
+
+```powershell
+python scripts\load_test.py --cleanup-marker bench-aad4840e769745baa410aaaaca4c312d
+```
+
+Repeat with the other run's marker if needed. Cleanup removes only benchmark
+data tagged with that exact marker. Confirm the command reports successful
+cleanup and inspect the database/Redis to ensure no matching test links or
+pending events remain. If cleanup fails, preserve the report and investigate
+before retrying or starting another benchmark.
+
+Review the report's actual rates, redirect/creation ratio, client-observed
+P95s, errors, cache mode, analytics drain, and cleanup status. The target
+acceptance thresholds are approximately 1,000 redirects/s and 10 creations/s
+at a 100:1 ratio, redirect client P95 no greater than 50 ms, and creation
+client P95 no greater than 200 ms. Do not use API middleware histogram values
+as a substitute for client-observed latency. If a local run misses these
+thresholds, record the result as a local diagnostic and investigate; do not
+describe it as a capacity failure or pass for a representative deployment.
+A representative capacity claim requires representative deployed resources
+and a load generator separate from the services. Defer formal capacity
+acceptance until such an environment is available.
+
+Run Redis-outage behavior as a separate, short diagnostic after collecting
+normal-cache results: preserve a known link in PostgreSQL, stop Redis, request
+the short URL without following redirects, and confirm `302` with the stored
+destination while readiness reports Redis unavailable. Restart Redis promptly;
+confirm readiness recovers and inspect the API cache-lookup error and
+click-publication failure counters. Do not use outage measurements to claim
+the normal-cache Q-6/Q-7 targets.
 
 For a disposable development/test database, reverse the current migration with:
 

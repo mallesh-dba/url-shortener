@@ -36,6 +36,11 @@ DB_POOL_CHECKED_OUT = Gauge(
     "Database connections currently checked out",
     registry=METRICS_REGISTRY,
 )
+DB_POOL_CHECKED_OUT_HIGH_WATER = Gauge(
+    "url_shortener_db_pool_checked_out_high_water",
+    "Peak checked-out database connections since process start",
+    registry=METRICS_REGISTRY,
+)
 DB_POOL_CAPACITY = Gauge(
     "url_shortener_db_pool_capacity",
     "Configured database connection pool capacity",
@@ -49,6 +54,11 @@ CLICK_EVENT_PUBLISH_FAILURES = Counter(
 ANALYTICS_PROCESSING_FAILURES = Counter(
     "url_shortener_analytics_processing_failures_total",
     "Click event processing failures",
+    registry=METRICS_REGISTRY,
+)
+ANALYTICS_PROCESSED_EVENTS = Counter(
+    "url_shortener_analytics_processed_events_total",
+    "Click stream entries successfully persisted and acknowledged",
     registry=METRICS_REGISTRY,
 )
 ANALYTICS_REDIS_FAILURES = Counter(
@@ -70,11 +80,19 @@ ANALYTICS_STREAM_LAG = Gauge(
 
 def observe_database_pool(engine: AsyncEngine, capacity: int) -> None:
     DB_POOL_CAPACITY.set(capacity)
+    checked_out_count = 0
+    high_water_count = 0
 
     def checked_out(*_args: object) -> None:
+        nonlocal checked_out_count, high_water_count
+        checked_out_count += 1
         DB_POOL_CHECKED_OUT.inc()
+        high_water_count = max(high_water_count, checked_out_count)
+        DB_POOL_CHECKED_OUT_HIGH_WATER.set(high_water_count)
 
     def checked_in(*_args: object) -> None:
+        nonlocal checked_out_count
+        checked_out_count -= 1
         DB_POOL_CHECKED_OUT.dec()
 
     event.listen(engine.sync_engine, "checkout", checked_out)

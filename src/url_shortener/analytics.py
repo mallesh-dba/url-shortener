@@ -18,6 +18,7 @@ from url_shortener.config import Settings, get_settings
 from url_shortener.models import ClickEvent, ShortLink
 from url_shortener.observability import (
     ANALYTICS_PENDING_EVENTS,
+    ANALYTICS_PROCESSED_EVENTS,
     ANALYTICS_PROCESSING_FAILURES,
     ANALYTICS_REDIS_FAILURES,
     ANALYTICS_STREAM_LAG,
@@ -323,6 +324,7 @@ class ClickAnalyticsWorker:
         for stream_id, fields in messages:
             try:
                 await self.persist_and_ack(stream_id, fields)
+                ANALYTICS_PROCESSED_EVENTS.inc()
                 processed += 1
             except (
                 SQLAlchemyError,
