@@ -2,7 +2,7 @@ import asyncio
 from datetime import datetime, timedelta
 from functools import wraps
 from typing import Any, Callable, Coroutine
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 from uuid import UUID
 
 import pytest
@@ -18,7 +18,10 @@ from url_shortener.analytics import (
 from url_shortener.config import Settings
 from prometheus_client import generate_latest
 
-from url_shortener.observability import METRICS_REGISTRY
+from url_shortener.observability import (
+    ANALYTICS_PROCESSED_EVENTS,
+    METRICS_REGISTRY,
+)
 
 def async_test(
     function: Callable[..., Coroutine[Any, Any, None]],
@@ -37,6 +40,26 @@ def make_settings() -> Settings:
         redis_url="redis://localhost:6379/0",
         public_base_url="https://sho.rt",
     )
+
+
+@async_test
+async def test_successful_processing_increments_processed_events_metric() -> None:
+    redis_client = AsyncMock()
+    session_factory = Mock()
+    worker = ClickAnalyticsWorker(
+        redis_client,
+        session_factory,
+        make_settings(),
+    )
+    before = ANALYTICS_PROCESSED_EVENTS.collect()[0].samples[0].value
+
+    with patch.object(worker, "persist_and_ack", new_callable=AsyncMock):
+        assert await worker._process_messages(
+            [("1-0", click_fields())]
+        ) == 1
+
+    after = ANALYTICS_PROCESSED_EVENTS.collect()[0].samples[0].value
+    assert after == before + 1
 
 
 def click_fields(
