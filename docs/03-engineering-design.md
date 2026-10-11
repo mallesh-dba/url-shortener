@@ -1,6 +1,6 @@
 # URL Shortener - Engineering Design
 
-**Status:** Proposed design for review  
+**Status:** Baseline design implemented as an assignment prototype; capacity targets remain unverified
 **Scope:** Mandatory URL-shortener use case  
 **Stack constraints for this design:** Python 3.11+, FastAPI, SQLAlchemy 2.0 async, PostgreSQL, and Redis
 
@@ -92,7 +92,7 @@ sequenceDiagram
 
 The task is scheduled as part of the response handling; a process crash before the background task publishes the event can lose that click. This is an explicit best-effort trade-off for the prototype. If analytics must be loss-resistant, publish the event to the stream synchronously before returning the redirect, or use a transactional outbox and a dispatcher. In either case, keep PostgreSQL work out of the redirect's critical path where possible.
 
-## 4. Proposed API Surface
+## 4. Implemented API Surface
 
 | Method and path | Behavior | Success / errors |
 |---|---|---|
@@ -217,14 +217,17 @@ For high event volume, time partitioning and retention/archival can be introduce
 - Whether analytics needs per-day breakdowns, and which data may be collected.
 - Production Redis durability, PostgreSQL backup/restore, migration, and deployment strategy.
 
-## 12. Verification Plan
+## 12. Verification and Acceptance Criteria
 
-Before implementation, map tests to the requirements. During implementation, verify:
+Use these checks as acceptance criteria during implementation and review:
 
 - URL validation, successful creation, unique-code collision retry, and persistence across application restart.
 - Redirect for an existing code, `404` for an unknown code, cache hit, cache miss, and Redis cache outage fallback.
 - Analytics event publication, worker persistence, idempotent retry, aggregate count, and behavior when background publishing fails.
 - Async session lifecycle, API error formats, and endpoint contract with integration tests against PostgreSQL and Redis.
-- Peak-load behavior at the Q-6 rates and Q-7 P95 limits, including cache-hit and cache-miss cases and analytics processing at the corresponding event rate.
+- Peak-load behavior at the Q-6 rates and Q-7 P95 limits, including cache-hit and cache-miss cases and analytics processing at the corresponding event rate. Current local measurements and their limitations are recorded in the [engineering breakdown](04-engineering-breakdown.md) and the [AI-assisted work log](ai-usage-log.md).
 
-Record actual commands and results in the testing documentation; this design does not claim those tests have already been run.
+The measured local runs did not meet Q-6/Q-7, so those targets remain unaccepted. The assignment prototype's current implementation and evidence do not establish production readiness or external stakeholder approval.
+
+For a reviewer-oriented summary of assumptions, risks, and the implemented
+database schema, see [Risks, Assumptions, and Database Design](05-risk-assumptions-database-design.md).

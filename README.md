@@ -14,6 +14,9 @@ Copy `.env.example` to `.env` and update the PostgreSQL, Redis, and public base
 URL settings for your environment. `URL_SHORTENER_PUBLIC_BASE_URL` is the
 HTTP(S) origin used to construct returned short URLs. The example values are
 for local development only; do not use them as production credentials.
+This repository does not include a container-orchestration file; provision
+PostgreSQL and Redis separately. The analytics worker requires Redis 6.2 or
+newer.
 
 Apply the PostgreSQL schema migration before using the link-creation API
 (especially when setting up a fresh database):
@@ -166,6 +169,47 @@ The integration test creates a short link, checks PostgreSQL persistence,
 Redis cache and stream publication, redirect behavior, and analytics/error
 contracts. It uses a unique stream and removes its test link/cache/stream data
 afterward. The test requires the schema migration to be applied.
+
+## Implementation and acceptance status
+
+The baseline URL-shortener implementation is present. `src/url_shortener`
+contains the FastAPI app and health checks, link creation/redirect/analytics
+routes, async persistence and Redis cache access, the Redis Stream analytics
+worker, and metrics/logging. Alembic revision `20261010_01` creates
+`short_links` and `click_events`; it can be applied with `alembic upgrade head`.
+The documented API contracts and operational details are in this README and
+the [engineering design](docs/03-engineering-design.md).
+For a quick standalone reference to assumptions, risks, and PostgreSQL schema,
+see [Risks, Assumptions, and Database Design](docs/05-risk-assumptions-database-design.md).
+
+Latest regular-suite evidence: `python -m pytest -q` passed **77 tests** and
+skipped the one PostgreSQL/Redis integration test because its opt-in variable
+was not set. An earlier integration-enabled run passed **76 tests** against
+configured local PostgreSQL and Redis; the exact command and evidence are in
+the [engineering breakdown](docs/04-engineering-breakdown.md) and
+[AI-assisted work log](docs/ai-usage-log.md). The run was not repeated as part
+of final documentation review.
+
+T-110 benchmark code and local warm/cold measurements are recorded in the
+[benchmark reports](docs/t110-local-load-test.json),
+[additional warm report](docs/t110-warm-results.json), and
+[additional cold report](docs/t110-cold-results.json). These local runs missed
+Q-6/Q-7. The latest pair reported incomplete analytics draining; its benchmark
+fixtures were subsequently removed with the cleanup-only command. The
+persisted-versus-acknowledged event-count discrepancy still needs investigation.
+No capacity claim is made. Formal Q-6/Q-7 acceptance is deferred until
+representative deployment resources and a separate load generator are
+available.
+
+This remains an assignment prototype, not a production-ready public service.
+Authentication, rate limiting, abuse/admin controls, backup/restore, deployment
+strategy, analytics privacy/retention policy, and loss-resistant click delivery
+require explicit decisions and implementation before production use. Click
+publication is best effort after the redirect response; recent analytics may
+lag, and a process failure before publication can lose a click. The current
+simulated baseline approval is documented in the [business requirement](docs/01-business-requirement.md);
+there is no external stakeholder approval. Human sign-off from a clean setup
+has not been performed.
 
 ## Capacity and latency benchmark
 
