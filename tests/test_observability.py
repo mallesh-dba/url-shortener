@@ -60,6 +60,28 @@ def test_public_app_does_not_expose_metrics_and_labels_stay_bounded() -> None:
     assert "token=secret" not in metrics
 
 
+def test_unrecognized_method_uses_bounded_metric_label_and_original_log_value() -> None:
+    app = create_app(make_settings())
+    http_logger = logging.getLogger("url_shortener.http")
+
+    with (
+        patch.object(http_logger, "info") as log_info,
+        TestClient(app) as client,
+    ):
+        response = client.request("UNREGISTERED-METHOD", "/health/live")
+
+    assert response.status_code == 405
+    extra = log_info.call_args.kwargs["extra"]
+    assert extra["method"] == "UNREGISTERED-METHOD"
+
+    metrics = generate_latest(METRICS_REGISTRY).decode()
+    assert (
+        'url_shortener_http_requests_total{method="OTHER",'
+        'route="/health/live",status_code="405"}'
+    ) in metrics
+    assert 'method="UNREGISTERED-METHOD"' not in metrics
+
+
 def test_api_metrics_listener_uses_private_bind_and_closes_on_shutdown() -> None:
     settings = make_settings().model_copy(
         update={"api_metrics_host": "127.0.0.1", "api_metrics_port": 19100}

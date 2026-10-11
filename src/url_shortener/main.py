@@ -34,6 +34,20 @@ from url_shortener.observability import (
     observe_database_pool,
 )
 
+SUPPORTED_HTTP_METHODS = frozenset(
+    {
+        "CONNECT",
+        "DELETE",
+        "GET",
+        "HEAD",
+        "OPTIONS",
+        "PATCH",
+        "POST",
+        "PUT",
+        "TRACE",
+    }
+)
+
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     @asynccontextmanager
@@ -115,13 +129,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             if not isinstance(route_template, str):
                 route_template = "unmatched"
             duration_seconds = perf_counter() - started_at
+            metric_method = (
+                request.method
+                if request.method in SUPPORTED_HTTP_METHODS
+                else "OTHER"
+            )
             HTTP_REQUESTS.labels(
-                request.method,
+                metric_method,
                 route_template,
                 str(status_code),
             ).inc()
             HTTP_REQUEST_DURATION.labels(
-                request.method,
+                metric_method,
                 route_template,
             ).observe(duration_seconds)
             logging.getLogger("url_shortener.http").info(
