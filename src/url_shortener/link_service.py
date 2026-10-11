@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from url_shortener.config import Settings
 from url_shortener.models import ShortLink
+from url_shortener.observability import CACHE_OPERATIONS, CODE_COLLISION_RETRIES
 from url_shortener.schemas import ShortLinkCreateRequest
 
 logger = logging.getLogger(__name__)
@@ -104,37 +105,18 @@ async def create_short_link(
             await session.commit()
         except IntegrityError as error:
             await _rollback(session)
-            if (
-                _is_code_collision(error)
-                and attempt + 1 < MAX_CODE_GENERATION_ATTEMPTS
-            ):
-                continue
+            if _is_code_collision(error):
+                CODE_COLLISION_RETRIES.inc()
+                if attempt + 1 < MAX_CODE_GENERATION_ATTEMPTS:
+                    continue
             logger.error("Short-link persistence failed")
             raise LinkPersistenceUnavailable from error
-        except SQLAlchemyError as error:
+        except (SQLAlchemyError, OSError, TimeoutError) as error:
             await _rollback(session)
             logger.error("Short-link persistence failed")
             raise LinkPersistenceUnavailable from error
 
-        cache_key = f"short:v1:{link.code}"
-        cache_value = json.dumps(
-            {
-                "link_id": link.id,
-                "destination_url": link.destination_url,
-            },
-            separators=(",", ":"),
-        )
-        try:
-            await redis_client.set(
-                cache_key,
-                cache_value,
-                ex=settings.link_cache_ttl_seconds,
-            )
-        except RedisError:
-            logger.warning(
-                "Short-link cache population failed",
-                extra={"short_code": link.code},
-            )
+        await _cache_mapping(redis_client, link, settings)
         return link
 
     raise LinkPersistenceUnavailable
@@ -177,10 +159,12 @@ async def _cache_mapping(
             cache_value,
             ex=settings.link_cache_ttl_seconds,
         )
-    except (RedisError, TimeoutError):
+        CACHE_OPERATIONS.labels("populate", "success").inc()
+    except (RedisError, OSError, TimeoutError):
+        CACHE_OPERATIONS.labels("populate", "error").inc()
         logger.warning(
             "Short-link cache population failed",
-            extra={"short_code": link.code},
+            extra={"operation": "populate", "outcome": "error"},
         )
 
 
@@ -191,24 +175,31 @@ async def find_short_link(
     settings: Settings,
 ) -> tuple[str | None, int | None]:
     cache_key = f"short:v1:{code}"
+    cache_error = False
     try:
         cached_value = await redis_client.get(cache_key)
-    except (RedisError, TimeoutError):
+    except (RedisError, OSError, TimeoutError):
+        cache_error = True
+        CACHE_OPERATIONS.labels("lookup", "error").inc()
         logger.warning(
             "Short-link cache lookup failed",
-            extra={"short_code": code},
+            extra={"operation": "lookup", "outcome": "error"},
         )
         cached_value = None
 
     if cached_value is not None:
         cached_mapping = _mapping_cache_value(cached_value)
         if cached_mapping is not None:
+            CACHE_OPERATIONS.labels("lookup", "hit").inc()
             link_id, destination_url = cached_mapping
             return destination_url, link_id
+        CACHE_OPERATIONS.labels("lookup", "invalid").inc()
         logger.warning(
             "Invalid short-link cache entry",
-            extra={"short_code": code},
+            extra={"operation": "lookup", "outcome": "invalid"},
         )
+    elif cached_value is None and not cache_error:
+        CACHE_OPERATIONS.labels("lookup", "miss").inc()
 
     try:
         result = await session.execute(

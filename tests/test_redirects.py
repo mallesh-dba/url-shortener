@@ -2,6 +2,7 @@ import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
+import pytest
 from fastapi.testclient import TestClient
 from redis.exceptions import RedisError
 from sqlalchemy.exc import OperationalError
@@ -144,12 +145,18 @@ def test_redirect_returns_404_only_after_database_confirms_unknown_code() -> Non
     redis_client.set.assert_not_awaited()
 
 
-def test_redis_read_outage_falls_back_to_database_for_known_link() -> None:
+@pytest.mark.parametrize(
+    "redis_error",
+    [RedisError("redis unavailable"), OSError("socket unavailable")],
+)
+def test_redis_read_outage_falls_back_to_database_for_known_link(
+    redis_error: Exception,
+) -> None:
     link = make_link()
     session = make_session(link)
     redis_client = AsyncMock()
-    redis_client.get.side_effect = RedisError("redis unavailable")
-    redis_client.set.side_effect = RedisError("redis unavailable")
+    redis_client.get.side_effect = redis_error
+    redis_client.set.side_effect = redis_error
 
     response = request_redirect(session, redis_client)
 

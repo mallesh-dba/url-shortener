@@ -187,3 +187,5 @@ def test_dependency_readiness_checks() -> None:
 
     redis_client.ping.side_effect = TimeoutError
     assert asyncio.run(redis_is_ready(redis_client)) is False
+    redis_client.ping.side_effect = OSError("redis socket unavailable")
+    assert asyncio.run(redis_is_ready(redis_client)) is False

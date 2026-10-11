@@ -224,6 +224,24 @@ def test_create_link_maps_commit_failure_to_service_unavailable() -> None:
     redis_client.set.assert_not_awaited()
 
 
+@pytest.mark.parametrize("operation", ["flush", "commit"])
+def test_create_link_maps_database_timeouts_to_service_unavailable(
+    operation: str,
+) -> None:
+    session = make_session()
+    getattr(session, operation).side_effect = TimeoutError(
+        "database operation timed out"
+    )
+    redis_client = AsyncMock()
+
+    response = post_create_link(session, redis_client)
+
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "persistence_unavailable"
+    session.rollback.assert_awaited_once()
+    redis_client.set.assert_not_awaited()
+
+
 def test_create_link_succeeds_when_redis_cache_population_fails() -> None:
     session = make_session()
     redis_client = AsyncMock()
@@ -234,6 +252,18 @@ def test_create_link_succeeds_when_redis_cache_population_fails() -> None:
         return_value="Ab12Cd34",
     ):
         response = post_create_link(session, redis_client)
+
+    assert response.status_code == 201
+    session.commit.assert_awaited_once()
+    redis_client.set.assert_awaited_once()
+
+
+def test_create_link_succeeds_when_cache_population_times_out() -> None:
+    session = make_session()
+    redis_client = AsyncMock()
+    redis_client.set.side_effect = TimeoutError("redis timed out")
+
+    response = post_create_link(session, redis_client)
 
     assert response.status_code == 201
     session.commit.assert_awaited_once()

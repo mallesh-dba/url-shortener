@@ -16,7 +16,9 @@ from url_shortener.analytics import (
     trim_acknowledged_stream,
 )
 from url_shortener.config import Settings
+from prometheus_client import generate_latest
 
+from url_shortener.observability import METRICS_REGISTRY
 
 def async_test(
     function: Callable[..., Coroutine[Any, Any, None]],
@@ -152,6 +154,26 @@ async def test_click_event_publish_failure_is_logged_as_best_effort() -> None:
     await publish_click_event(redis_client, 42)
 
     redis_client.xadd.assert_awaited_once()
+
+
+@async_test
+async def test_worker_reports_pending_count_and_stream_lag_metrics() -> None:
+    session = FakeSession([])
+    redis_client = AsyncMock()
+    redis_client.xinfo_groups.return_value = [
+        {
+            "name": "click-analytics:v1",
+            "pending": 4,
+            "lag": 9,
+        }
+    ]
+    worker = make_worker(redis_client, session)
+
+    await worker.report_lag()
+
+    metrics = generate_latest(METRICS_REGISTRY).decode()
+    assert "url_shortener_analytics_pending_events 4.0" in metrics
+    assert "url_shortener_analytics_stream_lag 9.0" in metrics
 
 
 @async_test

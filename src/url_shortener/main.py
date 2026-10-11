@@ -1,16 +1,22 @@
 from contextlib import asynccontextmanager
+import logging
+from time import perf_counter
 from typing import AsyncIterator
 
 from fastapi import FastAPI, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from prometheus_client import start_http_server
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
     AsyncSession,
     async_sessionmaker,
     create_async_engine,
 )
+from starlette.middleware.base import RequestResponseEndpoint
+from starlette.responses import Response
 
 from url_shortener.config import Settings, get_settings
 from url_shortener.health import router as health_router
@@ -20,11 +26,19 @@ from url_shortener.link_service import (
     LinkPersistenceUnavailable,
     ShortLinkNotFound,
 )
+from url_shortener.observability import (
+    HTTP_REQUEST_DURATION,
+    HTTP_REQUESTS,
+    METRICS_REGISTRY,
+    configure_structured_logging,
+    observe_database_pool,
+)
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(application: FastAPI) -> AsyncIterator[None]:
+        configure_structured_logging()
         current_settings = settings or get_settings()
         engine = create_async_engine(
             current_settings.database_url.get_secret_value(),
@@ -37,7 +51,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             pool_pre_ping=True,
         )
         redis_client: Redis | None = None
+        metrics_server = None
         try:
+            if isinstance(engine, AsyncEngine):
+                observe_database_pool(
+                    engine,
+                    current_settings.db_pool_size
+                    + current_settings.db_max_overflow,
+                )
             redis_client = Redis.from_url(
                 current_settings.redis_url.get_secret_value(),
                 max_connections=current_settings.redis_max_connections,
@@ -53,19 +74,69 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )
             application.state.redis = redis_client
             application.state.settings = current_settings
+            metrics_server, _ = start_http_server(
+                current_settings.api_metrics_port,
+                addr=current_settings.api_metrics_host,
+                registry=METRICS_REGISTRY,
+            )
             yield
         finally:
             try:
-                if redis_client is not None:
-                    await redis_client.aclose()
+                if metrics_server is not None:
+                    metrics_server.shutdown()
+                    metrics_server.server_close()
             finally:
-                await engine.dispose()
+                try:
+                    if redis_client is not None:
+                        await redis_client.aclose()
+                finally:
+                    await engine.dispose()
 
     application = FastAPI(
         title="URL Shortener",
         version="0.1.0",
         lifespan=lifespan,
     )
+
+    @application.middleware("http")
+    async def observe_request(
+        request: Request,
+        call_next: RequestResponseEndpoint,
+    ) -> Response:
+        started_at = perf_counter()
+        status_code = 500
+        try:
+            response = await call_next(request)
+            status_code = response.status_code
+            return response
+        finally:
+            route = request.scope.get("route")
+            route_template = getattr(route, "path", "unmatched")
+            if not isinstance(route_template, str):
+                route_template = "unmatched"
+            duration_seconds = perf_counter() - started_at
+            HTTP_REQUESTS.labels(
+                request.method,
+                route_template,
+                str(status_code),
+            ).inc()
+            HTTP_REQUEST_DURATION.labels(
+                request.method,
+                route_template,
+            ).observe(duration_seconds)
+            logging.getLogger("url_shortener.http").info(
+                "HTTP request completed",
+                extra={
+                    "method": request.method,
+                    "route": route_template,
+                    "status_code": status_code,
+                    "duration_seconds": duration_seconds,
+                },
+            )
+
+    @application.get("/metrics", include_in_schema=False)
+    async def reject_public_metrics_request() -> Response:
+        return Response(status_code=404)
 
     @application.exception_handler(RequestValidationError)
     async def request_validation_error(
