@@ -145,8 +145,26 @@ consistent; rerun the inspection if the worker has not processed the event yet.
 Run the current tests with:
 
 ```powershell
-pytest
+& 'D:\assignment\.venv\Scripts\python.exe' -m pytest -q
 ```
+
+The PostgreSQL/Redis-backed cross-service test is opt-in. Configure the
+development `.env`, start the PostgreSQL and Redis services, then run:
+
+```powershell
+$env:URL_SHORTENER_RUN_INTEGRATION = '1'
+try {
+    & 'D:\assignment\.venv\Scripts\python.exe' -m pytest -q
+}
+finally {
+    Remove-Item Env:URL_SHORTENER_RUN_INTEGRATION -ErrorAction SilentlyContinue
+}
+```
+
+The integration test creates a short link, checks PostgreSQL persistence,
+Redis cache and stream publication, redirect behavior, and analytics/error
+contracts. It uses a unique stream and removes its test link/cache/stream data
+afterward. The test requires the schema migration to be applied.
 
 For a disposable development/test database, reverse the current migration with:
 
