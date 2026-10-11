@@ -34,6 +34,8 @@ class Settings(BaseSettings):
     analytics_stream_trim_interval_seconds: Annotated[int, Field(gt=0)] = 60
     analytics_lag_log_interval_seconds: Annotated[int, Field(gt=0)] = 60
     analytics_retry_delay_seconds: Annotated[float, Field(gt=0)] = 1
+    api_metrics_host: Annotated[str, Field(min_length=1)] = "127.0.0.1"
+    api_metrics_port: Annotated[int, Field(ge=1, le=65535)] = 9100
     analytics_metrics_host: Annotated[str, Field(min_length=1)] = "127.0.0.1"
     analytics_metrics_port: Annotated[int, Field(ge=1, le=65535)] = 9101
 

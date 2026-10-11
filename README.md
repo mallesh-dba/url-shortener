@@ -34,10 +34,18 @@ external services. `GET /health/ready` checks PostgreSQL and Redis and returns
 dependency status without exposing connection details. The PostgreSQL readiness
 probe has a configurable two-second deadline by default
 (`URL_SHORTENER_DB_READINESS_TIMEOUT_SECONDS`).
-The API exposes low-cardinality Prometheus metrics at `/metrics`. Keep this
-endpoint on a trusted network; the route does not include short codes,
-destination URLs, client IP addresses, or user agents in metric labels or
-request logs.
+The API exposes low-cardinality Prometheus metrics on a separate listener,
+configured by `URL_SHORTENER_API_METRICS_HOST` and
+`URL_SHORTENER_API_METRICS_PORT` (default `127.0.0.1:9100`). Scrape
+`http://127.0.0.1:9100/` locally by default; `/metrics` is not a public scrape
+route.
+The public API reserves `/metrics` and returns `404` there; it does not serve
+the scrape output on the public listener.
+For a remote Prometheus server, bind the listener only to a private interface
+and allow access only from the monitoring network using host/network firewall
+rules. Do not publish or proxy this listener through the public API gateway.
+Metric labels use route templates and do not include short codes, destination
+URLs, client IP addresses, or user agents.
 
 Create a short link with:
 
@@ -82,7 +90,9 @@ pending-event count and stream lag; a lag value of `-1` means the Redis server
 did not provide a lag value. The metrics include request latency/status, cache
 outcomes, code-collision retries, database pool utilization, event publication
 failures, and worker processing/retry health. Keep the worker metrics listener
-private as well.
+private as well: use a private interface and monitoring-network firewall
+allowlist for remote scraping, and do not publish it through the public API
+gateway.
 
 ## Click analytics worker
 

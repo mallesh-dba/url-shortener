@@ -6,8 +6,8 @@ from typing import AsyncIterator
 from fastapi import FastAPI, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse, Response
-from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
+from fastapi.responses import JSONResponse
+from prometheus_client import start_http_server
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from starlette.middleware.base import RequestResponseEndpoint
+from starlette.responses import Response
 
 from url_shortener.config import Settings, get_settings
 from url_shortener.health import router as health_router
@@ -50,6 +51,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             pool_pre_ping=True,
         )
         redis_client: Redis | None = None
+        metrics_server = None
         try:
             if isinstance(engine, AsyncEngine):
                 observe_database_pool(
@@ -72,13 +74,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )
             application.state.redis = redis_client
             application.state.settings = current_settings
+            metrics_server, _ = start_http_server(
+                current_settings.api_metrics_port,
+                addr=current_settings.api_metrics_host,
+                registry=METRICS_REGISTRY,
+            )
             yield
         finally:
             try:
-                if redis_client is not None:
-                    await redis_client.aclose()
+                if metrics_server is not None:
+                    metrics_server.shutdown()
+                    metrics_server.server_close()
             finally:
-                await engine.dispose()
+                try:
+                    if redis_client is not None:
+                        await redis_client.aclose()
+                finally:
+                    await engine.dispose()
 
     application = FastAPI(
         title="URL Shortener",
@@ -123,11 +135,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )
 
     @application.get("/metrics", include_in_schema=False)
-    async def metrics() -> Response:
-        return Response(
-            content=generate_latest(METRICS_REGISTRY),
-            media_type=CONTENT_TYPE_LATEST,
-        )
+    async def reject_public_metrics_request() -> Response:
+        return Response(status_code=404)
 
     @application.exception_handler(RequestValidationError)
     async def request_validation_error(
