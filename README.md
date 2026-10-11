@@ -145,7 +145,7 @@ consistent; rerun the inspection if the worker has not processed the event yet.
 Run the current tests with:
 
 ```powershell
-& 'D:\assignment\.venv\Scripts\python.exe' -m pytest -q
+python -m pytest -q
 ```
 
 The PostgreSQL/Redis-backed cross-service test is opt-in. Configure the
@@ -154,7 +154,7 @@ development `.env`, start the PostgreSQL and Redis services, then run:
 ```powershell
 $env:URL_SHORTENER_RUN_INTEGRATION = '1'
 try {
-    & 'D:\assignment\.venv\Scripts\python.exe' -m pytest -q
+    python -m pytest -q
 }
 finally {
     Remove-Item Env:URL_SHORTENER_RUN_INTEGRATION -ErrorAction SilentlyContinue
