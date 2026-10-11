@@ -9,6 +9,7 @@ import platform
 import random
 import secrets
 import string
+import sys
 import time
 from typing import Any
 from urllib.parse import urlsplit
@@ -86,8 +87,9 @@ class OperationStats:
 def percentile(values: list[float], quantile: float) -> float | None:
     if not values:
         return None
-    index = max(0, math.ceil(quantile * len(values)) - 1)
-    return round(values[index], 2)
+    ordered = sorted(values)
+    index = max(0, math.ceil(quantile * len(ordered)) - 1)
+    return round(ordered[index], 2)
 
 
 def latency_summary(values: list[float]) -> dict[str, float | None]:
@@ -508,6 +510,7 @@ async def cleanup_test_data(
 async def benchmark(args: argparse.Namespace) -> dict[str, Any]:
     settings = get_settings()
     marker = f"bench-{uuid4().hex}"
+    print(f"Benchmark run marker: {marker}", file=sys.stderr, flush=True)
     timeout = httpx.Timeout(args.request_timeout_seconds)
     limits = httpx.Limits(
         max_connections=args.concurrency,

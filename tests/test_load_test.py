@@ -24,6 +24,14 @@ def test_percentile_uses_nearest_rank() -> None:
     assert percentile([1, 2, 3, 4, 5], 0.95) == 5
 
 
+def test_percentile_sorts_values_before_selecting_nearest_rank() -> None:
+    assert percentile([5, 1, 4, 2, 3], 0.50) == 3
+
+
+def test_percentile_returns_none_for_empty_input() -> None:
+    assert percentile([], 0.95) is None
+
+
 def test_service_histogram_percentile_uses_delta_buckets() -> None:
     before = {
         (
@@ -63,7 +71,7 @@ def test_service_histogram_percentile_uses_delta_buckets() -> None:
 def test_fixed_rate_scheduler_skips_missed_slots_instead_of_backlogging() -> None:
     async def exercise() -> tuple[int, float]:
         started = time.monotonic()
-        stats, _, _, _ = await run_load(
+        stats, warmup_stats, tail_stats, _ = await run_load(
             client=SlowClient(),
             links=[(1, "Ab12Cd34", "https://example.com/seed")],
             marker="bench-test",
@@ -74,9 +82,14 @@ def test_fixed_rate_scheduler_skips_missed_slots_instead_of_backlogging() -> Non
             concurrency=1,
             cache_mode="warm",
         )
-        return len(stats["redirect"].latencies_ms), time.monotonic() - started
+        completed = sum(
+            len(group[operation].latencies_ms)
+            for group in (stats, warmup_stats, tail_stats)
+            for operation in ("redirect", "creation")
+        )
+        return completed, time.monotonic() - started
 
     completed, elapsed = asyncio.run(exercise())
 
-    assert completed < 30
-    assert elapsed < 5
+    assert 25 <= completed <= 45
+    assert elapsed < 4.5
