@@ -1,0 +1,174 @@
+{
+  "schema_version": "1.0",
+  "scenario": "greenfield",
+  "classification_note": "Scenario is inferred by simple local keyword rules and must be confirmed by a human.",
+  "source_file": "examples\\greenfield.txt",
+  "requirement": "Build a scalable URL shortener from scratch. Analyze this requirement using\ndocs/01-business-requirement.md, docs/02-requirement-analysis.md, and\ndocs/03-engineering-design.md.\n\nPreserve the design's stack: Python 3.11+, FastAPI, async SQLAlchemy 2.x,\nPostgreSQL, and Redis. Include an API to create a short link, a redirect for\nknown codes, and click analytics. Preserve the documented API contracts:\nPOST /api/v1/shorten returns 201; GET /{code} returns 302 or 404; and\nGET /api/v1/links/{code}/analytics returns the code and clicks_total.\nAccept absolute HTTP(S) destination URLs only.\n\nReturn a structured draft with a summary, functional and quality requirements,\nassumptions, open questions, risks, ordered tasks with dependencies, tests, and\nacceptance checks. Treat Q-6 and Q-7 as targets requiring measurement; do not\nclaim they pass without benchmark evidence. Mark the result as pending human\nreview. Do not treat the draft as approved implementation or external sign-off.",
+  "summary": "Plan the baseline URL-shortener service from the approved assignment documents.",
+  "functional_requirements": [
+    "Create short links from valid absolute HTTP(S) destination URLs.",
+    "Persist short-code mappings in PostgreSQL.",
+    "Redirect known codes and return 404 only after confirming an unknown code.",
+    "Record click events asynchronously and expose aggregate link analytics."
+  ],
+  "quality_requirements": [
+    "Use Python 3.11+, FastAPI, async SQLAlchemy 2.x, PostgreSQL, and Redis.",
+    "Keep click processing idempotent and disclose the best-effort publication window.",
+    "Measure Q-6/Q-7; do not claim performance acceptance without benchmark evidence."
+  ],
+  "assumptions": [
+    "The existing engineering design is the stack and API contract source for this scenario.",
+    "Custom aliases, expiration, authentication, and collection of IP/user-agent data are out of baseline scope."
+  ],
+  "open_questions": [
+    "Are additional URL-validation, authentication, rate-limiting, or abuse controls required before deployment?",
+    "What representative environment and separate load generator will be used for formal Q-6/Q-7 acceptance?"
+  ],
+  "risks": [
+    "Local benchmark results do not establish deployed capacity or satisfy Q-6/Q-7.",
+    "A process failure before background event publication can lose a click."
+  ],
+  "ordered_tasks": [
+    {
+      "id": "T-101",
+      "title": "Define baseline requirements and acceptance criteria",
+      "description": "Define requirements and acceptance criteria; separate confirmed scope from assumptions and open decisions.",
+      "dependencies": [],
+      "ai_assistance_point": "Use AI to trace statements to source requirements and identify gaps without silently deciding them.",
+      "human_validation": "Human review confirms scope, dependencies, and acceptance checks against the source documents."
+    },
+    {
+      "id": "T-102",
+      "title": "Set up async application and configuration",
+      "description": "Set up the asynchronous application, configuration, and resource lifecycle.",
+      "dependencies": [
+        "T-101"
+      ],
+      "ai_assistance_point": "Use AI to draft a minimal scaffold that follows project conventions.",
+      "human_validation": "Start the service and verify health, readiness, and explicit configuration failures."
+    },
+    {
+      "id": "T-103",
+      "title": "Create link and click-event schema",
+      "description": "Define the PostgreSQL models, constraints, indexes, and reversible migration.",
+      "dependencies": [
+        "T-102"
+      ],
+      "ai_assistance_point": "Ask AI to derive schema and constraints from the engineering design.",
+      "human_validation": "Apply the migration and inspect tables, indexes, and constraint behavior."
+    },
+    {
+      "id": "T-104",
+      "title": "Implement link creation and persistence",
+      "description": "Implement validated short-link creation and durable persistence.",
+      "dependencies": [
+        "T-103"
+      ],
+      "ai_assistance_point": "Use AI to draft typed request handling and focused contract tests.",
+      "human_validation": "Verify valid/invalid inputs, response contract, persistence, and cache behavior."
+    },
+    {
+      "id": "T-105",
+      "title": "Implement cached redirects and database fallback",
+      "description": "Implement redirect lookup, cache fallback, and documented not-found behavior.",
+      "dependencies": [
+        "T-104"
+      ],
+      "ai_assistance_point": "Ask AI to enumerate cache and database failure paths and tests.",
+      "human_validation": "Verify 302/404/503 behavior with cache and database failure cases."
+    },
+    {
+      "id": "T-106",
+      "title": "Implement Redis Stream analytics pipeline",
+      "description": "Implement asynchronous click-event transport and idempotent worker processing.",
+      "dependencies": [
+        "T-103",
+        "T-105"
+      ],
+      "ai_assistance_point": "Use AI to draft event processing and failure-injection tests.",
+      "human_validation": "Verify duplicate delivery, commit-before-ack, pending recovery, and disclosed loss window."
+    },
+    {
+      "id": "T-107",
+      "title": "Implement analytics API",
+      "description": "Expose the documented aggregate analytics response.",
+      "dependencies": [
+        "T-103",
+        "T-106"
+      ],
+      "ai_assistance_point": "Use AI to draft a typed response and contract tests.",
+      "human_validation": "Verify response shape, unknown-link behavior, and eventual aggregate updates."
+    },
+    {
+      "id": "T-108",
+      "title": "Implement security, reliability, and observability controls",
+      "description": "Apply approved security, reliability, and observability controls.",
+      "dependencies": [
+        "T-104",
+        "T-105",
+        "T-106",
+        "T-107"
+      ],
+      "ai_assistance_point": "Use AI to inspect relevant code paths and suggest targeted tests.",
+      "human_validation": "Inspect collected fields, error handling, privacy, and metric cardinality."
+    },
+    {
+      "id": "T-109",
+      "title": "Add automated and integration tests",
+      "description": "Add focused regression and cross-service integration tests.",
+      "dependencies": [
+        "T-104",
+        "T-105",
+        "T-106",
+        "T-107",
+        "T-108"
+      ],
+      "ai_assistance_point": "Use AI to derive test cases from requirements and failure modes.",
+      "human_validation": "Run the regular suite and configured integration suite; inspect failures."
+    },
+    {
+      "id": "T-110",
+      "title": "Validate capacity and latency targets",
+      "description": "Measure target request rates, latency, errors, and analytics drain.",
+      "dependencies": [
+        "T-108",
+        "T-109"
+      ],
+      "ai_assistance_point": "Use AI to plan reproducible runs and interpret actual measurements.",
+      "human_validation": "Run the benchmark and report measured Q-6/Q-7 results without extrapolation."
+    },
+    {
+      "id": "T-111",
+      "title": "Document and sign off engineering deliverables",
+      "description": "Document implementation, setup, validation, decisions, risks, and limitations.",
+      "dependencies": [
+        "T-109",
+        "T-110"
+      ],
+      "ai_assistance_point": "Use AI to draft documentation from verified code and captured test output.",
+      "human_validation": "Follow clean setup instructions and verify claims against code and evidence."
+    }
+  ],
+  "tests": [
+    "python -m pytest -q",
+    "Run the opt-in PostgreSQL/Redis integration suite after configuring services and migrations.",
+    "Measure warm- and cold-cache load behavior; report actual rates, client P95s, event drain, and cleanup."
+  ],
+  "acceptance_checks": [
+    "Create, persist, redirect, and retrieve analytics for a short link using the documented contracts.",
+    "Confirm invalid URLs, unknown codes, and dependency failures return documented errors.",
+    "Record benchmark evidence and mark Q-6/Q-7 accepted only if measured thresholds pass."
+  ],
+  "generation": {
+    "method": "local scenario template",
+    "live_ai_model_used": false,
+    "notice": "This CLI structures a draft; it does not call an AI model or make approval decisions."
+  },
+  "human_review": {
+    "status": "reviewed",
+    "decision": "accept",
+    "reviewer": "Candidate",
+    "reviewed_at": "2026-10-12T03:13:29.942210+00:00",
+    "notes": "Accepted the greenfield scenario draft at the user's direction; this is scenario-level review, not external stakeholder approval or performance sign-off."
+  }
+}

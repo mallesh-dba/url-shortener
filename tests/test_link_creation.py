@@ -55,6 +55,7 @@ def post_create_link(
     session: AsyncMock,
     redis_client: AsyncMock,
     destination_url: str = "https://example.com/path",
+    custom_alias: str | None = None,
 ):
     app = create_app(make_settings())
 
@@ -66,7 +67,14 @@ def post_create_link(
         client.app.state.redis = redis_client
         response = client.post(
             "/api/v1/shorten",
-            json={"destination_url": destination_url},
+            json={
+                "destination_url": destination_url,
+                **(
+                    {"custom_alias": custom_alias}
+                    if custom_alias is not None
+                    else {}
+                ),
+            },
         )
     return response
 
@@ -135,6 +143,77 @@ def test_create_link_commits_before_best_effort_cache_and_returns_contract() -> 
         "destination_url": "https://example.com/path",
     }
     assert redis_client.set.await_args.kwargs == {"ex": 3600}
+
+
+def test_create_link_uses_requested_custom_alias() -> None:
+    session = make_session()
+    redis_client = AsyncMock()
+
+    response = post_create_link(session, redis_client, custom_alias="summer-sale")
+
+    assert response.status_code == 201
+    assert response.json()["code"] == "summer-sale"
+    assert response.json()["short_url"] == "https://sho.rt/summer-sale"
+    stored_link: ShortLink = session.add.call_args.args[0]
+    assert stored_link.code == "summer-sale"
+    redis_client.set.assert_awaited_once()
+    assert redis_client.set.await_args.args[0] == "short:v1:summer-sale"
+
+
+@pytest.mark.parametrize(
+    "custom_alias",
+    [
+        "ab",
+        "a" * 17,
+        "-starts-with-hyphen",
+        "ends-with-hyphen-",
+        "upperCase",
+        "has space",
+        "has_underscore",
+        "api",
+        "health",
+        "metrics",
+        "docs",
+        "redoc",
+        "openapi.json",
+    ],
+)
+def test_create_link_rejects_invalid_or_reserved_custom_alias(
+    custom_alias: str,
+) -> None:
+    session = make_session()
+    redis_client = AsyncMock()
+
+    response = post_create_link(
+        session,
+        redis_client,
+        custom_alias=custom_alias,
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "validation_error"
+    session.add.assert_not_called()
+    session.commit.assert_not_awaited()
+    redis_client.set.assert_not_awaited()
+
+
+def test_duplicate_custom_alias_returns_conflict_without_retry() -> None:
+    session = make_session()
+    session.flush.side_effect = adapted_unique_violation("uq_short_links_code")
+    redis_client = AsyncMock()
+
+    response = post_create_link(
+        session,
+        redis_client,
+        custom_alias="summer-sale",
+    )
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "short_code_conflict"
+    assert session.add.call_count == 1
+    session.rollback.assert_awaited_once()
+    session.commit.assert_not_awaited()
+    redis_client.set.assert_not_awaited()
 
 
 def test_create_link_retries_only_short_code_unique_conflict() -> None:

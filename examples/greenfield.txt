@@ -1,0 +1,16 @@
+Build a scalable URL shortener from scratch. Analyze this requirement using
+docs/01-business-requirement.md, docs/02-requirement-analysis.md, and
+docs/03-engineering-design.md.
+
+Preserve the design's stack: Python 3.11+, FastAPI, async SQLAlchemy 2.x,
+PostgreSQL, and Redis. Include an API to create a short link, a redirect for
+known codes, and click analytics. Preserve the documented API contracts:
+POST /api/v1/shorten returns 201; GET /{code} returns 302 or 404; and
+GET /api/v1/links/{code}/analytics returns the code and clicks_total.
+Accept absolute HTTP(S) destination URLs only.
+
+Return a structured draft with a summary, functional and quality requirements,
+assumptions, open questions, risks, ordered tasks with dependencies, tests, and
+acceptance checks. Treat Q-6 and Q-7 as targets requiring measurement; do not
+claim they pass without benchmark evidence. Mark the result as pending human
+review. Do not treat the draft as approved implementation or external sign-off.

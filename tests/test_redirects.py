@@ -82,6 +82,21 @@ def test_redirect_cache_hit_skips_database_lookup() -> None:
     redis_client.set.assert_not_awaited()
 
 
+def test_custom_alias_redirect_uses_alias_as_the_short_code() -> None:
+    link = make_link()
+    link.code = "summer-sale"
+    session = make_session(None)
+    redis_client = AsyncMock()
+    redis_client.get.return_value = cached_mapping(link)
+
+    response = request_redirect(session, redis_client, "summer-sale")
+
+    assert response.status_code == 302
+    assert response.headers["location"] == link.destination_url
+    redis_client.get.assert_awaited_once_with("short:v1:summer-sale")
+    session.execute.assert_not_awaited()
+
+
 def test_redirect_publishes_a_click_event_in_background() -> None:
     link = make_link()
     session = make_session(None)

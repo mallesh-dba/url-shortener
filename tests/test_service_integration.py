@@ -156,3 +156,40 @@ def test_create_redirect_analytics_contract_with_postgres_and_redis() -> None:
     finally:
         if created_code is not None:
             asyncio.run(remove_integration_data(settings, created_code))
+
+
+def test_custom_alias_persists_redirects_and_conflicts_with_postgres() -> None:
+    settings = integration_settings()
+    alias = f"t116{uuid4().hex[:8]}"
+    created = False
+    try:
+        with TestClient(create_app(settings)) as client:
+            first = client.post(
+                "/api/v1/shorten",
+                json={
+                    "destination_url": "https://example.com/custom-alias",
+                    "custom_alias": alias,
+                },
+            )
+            assert first.status_code == 201
+            created = True
+            assert first.json()["code"] == alias
+
+            duplicate = client.post(
+                "/api/v1/shorten",
+                json={
+                    "destination_url": "https://example.com/duplicate",
+                    "custom_alias": alias,
+                },
+            )
+            assert duplicate.status_code == 409
+            assert duplicate.json()["error"]["code"] == "short_code_conflict"
+
+            redirect = client.get(f"/{alias}", follow_redirects=False)
+            assert redirect.status_code == 302
+            assert redirect.headers["location"] == (
+                "https://example.com/custom-alias"
+            )
+    finally:
+        if created:
+            asyncio.run(remove_integration_data(settings, alias))

@@ -24,6 +24,7 @@ from url_shortener.link_routes import router as link_router
 from url_shortener.link_service import (
     LinkLookupUnavailable,
     LinkPersistenceUnavailable,
+    ShortCodeAlreadyExists,
     ShortLinkNotFound,
 )
 from url_shortener.observability import (
@@ -184,6 +185,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "error": {
                     "code": "persistence_unavailable",
                     "message": "Link persistence is temporarily unavailable",
+                    "details": None,
+                }
+            },
+        )
+
+    @application.exception_handler(ShortCodeAlreadyExists)
+    async def code_conflict(
+        request: Request,
+        error: ShortCodeAlreadyExists,
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=409,
+            content={
+                "error": {
+                    "code": "short_code_conflict",
+                    "message": "The requested short code is already in use",
                     "details": None,
                 }
             },

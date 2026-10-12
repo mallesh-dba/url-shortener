@@ -28,13 +28,13 @@ not a separate approval or production-readiness sign-off.
 | Technology | Python 3.11+, FastAPI, async SQLAlchemy 2.x, PostgreSQL, and Redis are constraints of the engineering design for this use case. The assignment itself does not mandate this stack. | Implemented for this prototype; not an externally approved project-wide technology policy. |
 | Source of truth | PostgreSQL owns the durable short-link mapping, click-event rows, and `clicks_total` aggregate. Redis cache entries can expire or be lost without invalidating stored links. | Implemented. |
 | Destination handling | Accept absolute `http` and `https` URLs with a host and valid port. Store and redirect to the supplied destination; never fetch it during creation. | Implemented. This reduces server-side request forgery exposure but does not prevent phishing or abusive destinations. |
-| Short codes | Generate random Base62 codes (initial length eight; schema permits up to 16 characters) and retry bounded unique-code conflicts. | Implemented; custom aliases are not included. |
+| Short codes | Generate random Base62 codes (initial length eight; schema permits up to 16 characters) and retry bounded unique-code conflicts. An accepted brownfield extension permits optional aliases of 3–16 lowercase ASCII letters, digits, or hyphens, with alphanumeric ends and reserved route names. | Implemented; aliases share the same code namespace and unique constraint. |
 | Redirect behavior | Known links return `302`; unknown codes return `404` only after PostgreSQL confirms no mapping. A Redis failure falls back to PostgreSQL. | Implemented. |
 | Analytics scope | Record a UUID event ID, link ID, and UTC click time; expose the asynchronously maintained total count. No IP or user-agent collection. | Implemented. Time-series reporting, privacy retention policy, and access policy beyond the current API contract remain undecided. |
 | Click delivery | Redirect responses do not wait for click persistence. Background publication to Redis Streams is best effort; worker inserts the event and increments the aggregate transactionally and idempotently, then acknowledges it. | Implemented prototype trade-off. A process failure before publication or Redis data loss can lose analytics. Loss-resistant delivery requires an approved change such as a transactional outbox. |
 | Performance targets | Q-6 is approximately 1,000 redirects/s and 10 creations/s at 100:1. Q-7 is redirect P95 <= 50 ms and creation P95 <= 200 ms at that workload. | Required targets, not achieved results. Current local measurements fail these targets. |
 | Test environment | Local PostgreSQL and Redis support development, integration testing, and harness diagnostics. | Does not represent production capacity. Formal performance acceptance needs representative deployed resources and a separate load generator. |
-| Product/security scope | Authentication, rate limiting, abuse reporting, administrative controls, expiration, deletion/update semantics, and custom aliases are not specified in the baseline. | Keep out of scope until explicitly approved. Resolve security controls before public exposure. |
+| Product/security scope | Authentication, rate limiting, abuse reporting, administrative controls, expiration, and deletion/update semantics are not specified in the baseline. Custom aliases were separately approved as a brownfield extension. | Keep remaining features out of scope until explicitly approved. Resolve security controls before public exposure. |
 | Approval | Baseline acceptance is simulated by the candidate acting as business/engineering owner. | No external stakeholder approval or production operating commitment is implied. |
 
 ## Database Design
@@ -69,7 +69,8 @@ erDiagram
 | `clicks_total` | `BIGINT` | Not null, `0` | Asynchronously maintained aggregate; check constraint `ck_short_links_clicks_total_nonnegative` prevents negative values. |
 
 **Indexes:** Primary key on `id`. The unique constraint on `code` supplies a
-unique B-tree index used for direct lookup and collision enforcement.
+unique B-tree index used for direct lookup and collision enforcement for both
+generated codes and user-selected aliases.
 
 ### `click_events`
 
@@ -83,8 +84,9 @@ unique B-tree index used for direct lookup and collision enforcement.
 `ix_click_events_link_id_clicked_at` on `(link_id, clicked_at DESC)` supports
 per-link time-window queries.
 
-The initial schema intentionally has no IP address, user-agent, expiration,
-deletion, or alias-specific fields. It does not define a retention policy for
+The schema intentionally has no IP address, user-agent, expiration,
+deletion, or alias-specific fields; the alias is stored directly in `code`.
+It does not define a retention policy for
 stored click events; decide retention and deletion behavior before those
 requirements are introduced.
 

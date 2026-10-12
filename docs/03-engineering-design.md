@@ -10,7 +10,7 @@ This design covers link creation, persistent storage, redirects, and click analy
 
 The requirement analysis currently says that no stack is mandated. This design treats the stack listed in the design request as a constraint for this architecture only. If the stack is intended to be a confirmed project requirement, update the requirement analysis and approval record separately.
 
-The service does not fetch destination URLs; it validates and stores them, then redirects visitors. Only absolute `http` and `https` destinations are accepted. Authentication, custom aliases, link updates/deletion, expiration, and analytics retention require separate product decisions and are not included in the minimum behavior.
+The service does not fetch destination URLs; it validates and stores them, then redirects visitors. Only absolute `http` and `https` destinations are accepted. The minimum behavior generates short codes; custom aliases are implemented as an optional, separately accepted brownfield extension documented below. Authentication, link updates/deletion, expiration, and analytics retention remain outside scope.
 
 ## 2. High-Level Architecture
 
@@ -37,9 +37,9 @@ flowchart LR
 
 ### 3.1 Creation
 
-1. Client calls `POST /api/v1/shorten` with a destination URL.
+1. Client calls `POST /api/v1/shorten` with a destination URL and, optionally, a custom alias.
 2. FastAPI validates that the URL is absolute and uses the `http` or `https` scheme.
-3. The service generates a random Base62 short code and inserts the mapping into PostgreSQL. A unique constraint protects against collisions; on conflict, the service generates another code and retries a bounded number of times.
+3. If an alias is supplied, the service validates the approved alias rules; otherwise it generates a random Base62 short code. It inserts the mapping into PostgreSQL. The unique constraint protects the shared alias/generated-code namespace; generated-code collisions retry a bounded number of times, while an alias collision returns `409 Conflict`.
 4. After the database commit, the service writes the mapping to Redis with the configured TTL. Cache write failure is logged and metered but does not fail an already-committed creation.
 5. The API returns `201 Created` with the short code and short URL.
 
@@ -49,8 +49,8 @@ sequenceDiagram
     participant A as FastAPI
     participant P as PostgreSQL
     participant R as Redis
-    C->>A: POST /api/v1/shorten {destination_url}
-    A->>A: Validate URL and generate code
+    C->>A: POST /api/v1/shorten {destination_url, optional custom_alias}
+    A->>A: Validate URL and optional alias, or generate code
     A->>P: INSERT short_links
     P-->>A: Commit / return link
     A->>R: SET link mapping with TTL (best effort)
@@ -96,11 +96,27 @@ The task is scheduled as part of the response handling; a process crash before t
 
 | Method and path | Behavior | Success / errors |
 |---|---|---|
-| `POST /api/v1/shorten` | Validate and create a short link. Request body: `{"destination_url":"https://example.com/path"}` | `201` with `code`, `short_url`, and `created_at`; `422` for invalid input; `503` if persistence is unavailable. `short_url` uses the configured `URL_SHORTENER_PUBLIC_BASE_URL` origin. |
+| `POST /api/v1/shorten` | Validate and create a short link. Request body: `{"destination_url":"https://example.com/path","custom_alias":"summer-sale"}`; `custom_alias` is optional. | `201` with `code`, `short_url`, and `created_at`; `422` for invalid input; `409` (`short_code_conflict`) if a custom alias is already used; `503` if persistence is unavailable. `short_url` uses the configured `URL_SHORTENER_PUBLIC_BASE_URL` origin. |
 | `GET /{code}` | Resolve a short code and redirect. | `302` with `Location`; `404` only after PostgreSQL confirms no mapping; `503` when the database lookup fails. |
 | `GET /api/v1/links/{code}/analytics` | Retrieve click analytics. | `200` with `code` and `clicks_total`; `404` for an unknown code; `503` when PostgreSQL lookup fails. `clicks_total` is an asynchronously updated aggregate and may lag recent redirects. |
 
 Errors use the JSON shape `{"error":{"code":"...","message":"...","details":...}}`. Authentication and rate limiting are not specified by the assignment and must be decided before exposing the service publicly.
+
+### 4.1 Accepted custom-alias extension
+
+The brownfield scenario adds an optional `custom_alias` field to link creation.
+Aliases are 3–16 lowercase ASCII letters, digits, or hyphens, with an
+alphanumeric first and last character. Uppercase input is rejected. The names
+`api`, `health`, `metrics`, `docs`, `redoc`, and `openapi.json` are reserved.
+Aliases are case-sensitive under the URL contract, but only lowercase values
+are accepted. A duplicate alias returns HTTP `409` with error code
+`short_code_conflict`; database uniqueness is authoritative under concurrent
+requests.
+
+Custom aliases share `short_links.code` with generated codes. The existing
+`VARCHAR(16)` column and unique constraint cover the accepted contract; no
+migration is needed. Callers that omit `custom_alias` retain the original
+generated Base62 behavior and response shape.
 
 ## 5. PostgreSQL Schema
 
