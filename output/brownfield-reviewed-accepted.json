@@ -54,7 +54,8 @@
       "description": "Add the optional custom_alias field, validate it, persist it in the existing unique code column, and preserve generated-code behavior when omitted.",
       "dependencies": [
         "T-112",
-        "T-103"
+        "T-103",
+        "T-104"
       ],
       "ai_assistance_point": "Use AI to trace impacted schemas, routes, storage, and tests.",
       "human_validation": "Verify backward compatibility, existing unique-constraint behavior, invalid/reserved alias rejection, duplicate conflicts, and redirects; no migration is needed for the current schema."
@@ -100,11 +101,11 @@
     "decision": "accept",
     "reviewer": "Candidate",
     "reviewed_at": "2026-10-12T03:31:18.247413+00:00",
-    "notes": "Accepted the custom-alias requirement using the approved_decisions recorded above. Feature implementation and automated tests are complete. The regular suite skipped two opt-in integration tests; the user subsequently ran tests\\test_service_integration.py with URL_SHORTENER_RUN_INTEGRATION=1 against PostgreSQL and Redis, and both tests passed, including the custom-alias create, duplicate-conflict, and redirect flow."
+    "notes": "Accepted the custom-alias requirement using the approved_decisions recorded above. Feature implementation and automated tests are complete. The current regular suite passed 102 tests and skipped two opt-in PostgreSQL/Redis integration tests. The user separately ran tests\\test_service_integration.py with URL_SHORTENER_RUN_INTEGRATION=1 against PostgreSQL and Redis, and both tests passed, including the custom-alias create, duplicate-conflict, and redirect flow."
   },
   "implementation_status": {
     "status": "implemented",
     "schema_migration_required": false,
-    "validation": "Focused tests: 42 passed. Regular full suite: 98 passed, 2 opt-in integration tests skipped. Separate integration-enabled tests against PostgreSQL/Redis: 2 passed. Manual checks confirmed custom alias creation/302 redirect, invalid and reserved alias 422 responses, generated-code compatibility, and duplicate-alias 409."
+    "validation": "Focused tests: 42 passed. Current regular full suite: 102 passed, 2 opt-in integration tests skipped. Separate integration-enabled tests against PostgreSQL/Redis: 2 passed. Manual checks confirmed custom alias creation/302 redirect, invalid and reserved alias 422 responses, generated-code compatibility, and duplicate-alias 409."
   }
 }

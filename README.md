@@ -35,6 +35,11 @@ decision but does not verify that the draft was edited or determine whether
 acceptance is appropriate. Run its focused checks with
 `python -m pytest -q tests/test_requirement_processor.py`.
 
+Captured AI-assisted prompts and analyses, human review outcomes, and
+validation evidence are kept separately in [evidence/](evidence/README.md).
+These files distinguish assistant-generated analysis from deterministic CLI
+templates; the ambiguous scenario remains pending human clarification.
+
 ## Development setup
 
 Requires Python 3.11 or newer. Install the project and development dependencies:
