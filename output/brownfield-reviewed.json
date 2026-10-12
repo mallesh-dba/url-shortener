@@ -95,7 +95,7 @@
   },
   "human_review": {
     "status": "reviewed",
-    "decision": "reject",
+    "decision": "accept",
     "reviewer": "Candidate",
     "reviewed_at": "2026-10-12T03:32:58.530466+00:00",
     "notes": "Accept the proposed custom-alias scope with these rules: aliases must be 3–16\nlowercase ASCII letters, digits, or hyphens; must start and end with a letter\nor digit; and uppercase input is rejected. Reserve api, health, metrics, docs,\nredoc, and openapi.json. A duplicate alias returns HTTP 409 using the standard\nerror response. Keep aliases optional and preserve generated codes and the\nexisting response contract when omitted. First verify whether the current\nunique code column supports the rules; make a migration only if required.\nThis accepts the requirement and rules for implementation, not the completed\nfeature or its test results."

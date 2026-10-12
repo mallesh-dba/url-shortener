@@ -142,10 +142,10 @@ or test database because it removes the schema and its data.
 
 ## Current Validation and Open Evidence
 
-- Latest regular suite: `python -m pytest -q` — **77 passed, 1 skipped**. The
-  skipped test is the opt-in PostgreSQL/Redis integration test.
-- Earlier integration-enabled suite: **76 passed** against configured local
-  PostgreSQL and Redis.
+- Current regular-suite result: `python -m pytest -q` — **98 passed, 2 skipped**
+  (both PostgreSQL/Redis integration tests are opt-in).
+- Integration-enabled result: `tests\test_service_integration.py` — **2 passed**
+  against configured PostgreSQL and Redis, including the custom-alias flow.
 - Dependency check: `python -m pip check` — no broken requirements.
 - Local warm/cold benchmark reports are stored in
   [`t110-local-load-test.json`](t110-local-load-test.json),

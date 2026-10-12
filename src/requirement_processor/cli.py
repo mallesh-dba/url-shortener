@@ -246,6 +246,8 @@ def _analyze_command(args: argparse.Namespace) -> None:
 def _review_command(args: argparse.Namespace) -> None:
     source = Path(args.draft)
     draft = json.loads(source.read_text(encoding="utf-8"))
+    if not isinstance(draft, dict):
+        raise ValueError("draft JSON must be an object")
     review = draft.get("human_review")
     if not isinstance(review, dict) or review.get("status") != "pending":
         raise ValueError("draft must have human_review.status set to 'pending'")

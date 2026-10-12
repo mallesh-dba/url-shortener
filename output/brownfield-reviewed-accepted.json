@@ -100,11 +100,11 @@
     "decision": "accept",
     "reviewer": "Candidate",
     "reviewed_at": "2026-10-12T03:31:18.247413+00:00",
-    "notes": "Accepted the custom-alias requirement using the approved_decisions recorded above. The feature implementation and automated tests are complete; the opt-in live PostgreSQL/Redis integration check remains to be run."
+    "notes": "Accepted the custom-alias requirement using the approved_decisions recorded above. Feature implementation and automated tests are complete. The regular suite skipped two opt-in integration tests; the user subsequently ran tests\\test_service_integration.py with URL_SHORTENER_RUN_INTEGRATION=1 against PostgreSQL and Redis, and both tests passed, including the custom-alias create, duplicate-conflict, and redirect flow."
   },
   "implementation_status": {
     "status": "implemented",
     "schema_migration_required": false,
-    "validation": "Focused tests: 42 passed. Full suite: 98 passed, 2 integration tests skipped. Integration-enabled tests against PostgreSQL/Redis: 2 passed. Manual checks confirmed custom alias creation/302 redirect, invalid and reserved alias 422 responses, generated-code compatibility, and duplicate-alias 409."
+    "validation": "Focused tests: 42 passed. Regular full suite: 98 passed, 2 opt-in integration tests skipped. Separate integration-enabled tests against PostgreSQL/Redis: 2 passed. Manual checks confirmed custom alias creation/302 redirect, invalid and reserved alias 422 responses, generated-code compatibility, and duplicate-alias 409."
   }
 }

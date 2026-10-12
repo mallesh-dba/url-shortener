@@ -71,3 +71,41 @@ def test_review_cli_records_human_acceptance_without_overwriting_draft(tmp_path:
     assert reviewed["human_review"]["decision"] == "accept"
     assert reviewed["human_review"]["reviewer"] == "Candidate"
     assert reviewed["human_review"]["notes"] == "Reviewed and accepted for the scenario."
+
+
+@pytest.mark.parametrize("json_value", ["[]", "null", '"draft"'])
+def test_review_cli_rejects_non_object_json(
+    tmp_path: Path,
+    json_value: str,
+) -> None:
+    draft_path = tmp_path / "draft.json"
+    draft_path.write_text(json_value, encoding="utf-8")
+
+    assert main([
+        "review",
+        str(draft_path),
+        "--decision",
+        "accept",
+        "--reviewer",
+        "Candidate",
+        "--output",
+        str(tmp_path / "reviewed.json"),
+    ]) == 2
+
+
+def test_review_cli_preserves_human_review_validation_for_object_json(
+    tmp_path: Path,
+) -> None:
+    draft_path = tmp_path / "draft.json"
+    draft_path.write_text(json.dumps({"summary": "Missing review object"}), encoding="utf-8")
+
+    assert main([
+        "review",
+        str(draft_path),
+        "--decision",
+        "accept",
+        "--reviewer",
+        "Candidate",
+        "--output",
+        str(tmp_path / "reviewed.json"),
+    ]) == 2
