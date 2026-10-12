@@ -38,7 +38,8 @@ acceptance is appropriate. Run its focused checks with
 Captured AI-assisted prompts and analyses, human review outcomes, and
 validation evidence are kept separately in [evidence/](evidence/README.md).
 These files distinguish assistant-generated analysis from deterministic CLI
-templates; the ambiguous scenario remains pending human clarification.
+templates; the ambiguous scenario's requirements are accepted, while live
+database/integration validation remains pending.
 
 ## Development setup
 
@@ -52,6 +53,17 @@ Copy `.env.example` to `.env` and update the PostgreSQL, Redis, and public base
 URL settings for your environment. `URL_SHORTENER_PUBLIC_BASE_URL` is the
 HTTP(S) origin used to construct returned short URLs. The example values are
 for local development only; do not use them as production credentials.
+Set `URL_SHORTENER_ANALYTICS_API_KEY` to a private random token of at least 32
+characters before making requests. Generate one with
+`python -c "import secrets; print(secrets.token_urlsafe(32))"`. The API uses it
+to protect analytics and to key short-lived pseudonymous rate-limit buckets;
+never commit the token. The service reports not-ready and rejects limited
+routes until the token is configured.
+If deployed behind a trusted reverse proxy, set
+`URL_SHORTENER_TRUSTED_PROXY_CIDRS` to a JSON array of the proxy IP addresses or
+CIDR ranges, for example `["10.0.0.0/8"]`. Forwarded client addresses are only
+used when the immediate peer matches one of these configured networks;
+otherwise `X-Forwarded-For` is ignored.
 This repository does not include a container-orchestration file; provision
 PostgreSQL and Redis separately. The analytics worker requires Redis 6.2 or
 newer.
@@ -70,8 +82,9 @@ uvicorn url_shortener.main:app --reload --app-dir src
 ```
 
 `GET /health/live` reports whether the process is running and does not contact
-external services. `GET /health/ready` checks PostgreSQL and Redis and returns
-`503` if either dependency cannot be reached. The readiness response reports
+external services. `GET /health/ready` checks PostgreSQL, Redis, and presence
+of the analytics authentication token; it returns `503` if a dependency is
+unavailable or the token is not configured. The readiness response reports
 dependency status without exposing connection details. The PostgreSQL readiness
 probe has a configurable two-second deadline by default
 (`URL_SHORTENER_DB_READINESS_TIMEOUT_SECONDS`).
@@ -133,14 +146,25 @@ Retrieve the aggregate click count for a short code:
 
 ```powershell
 Invoke-RestMethod `
-  -Uri "http://127.0.0.1:8000/api/v1/links/$($response.code)/analytics"
+  -Uri "http://127.0.0.1:8000/api/v1/links/$($response.code)/analytics" `
+  -Headers @{ Authorization = "Bearer $env:URL_SHORTENER_ANALYTICS_API_KEY" }
 ```
 
-The response contains `code` and `clicks_total`; an unknown code returns `404`.
-The API reads the persisted aggregate from PostgreSQL. Since the analytics
-worker updates it asynchronously from the Redis Stream, it may not include the
-most recent redirects until those events are processed. It does not synchronously
-count `click_events` on each request.
+Analytics requires the configured bearer token. It authorizes access to all
+links for any holder of the shared token; this prototype has no per-user or
+per-link identity/authorization model. The response contains `code` and
+`clicks_total`, the aggregate over the trailing 12 calendar months; an unknown
+code returns `404`. The API reads daily aggregate rows from PostgreSQL. Since
+the analytics worker updates them asynchronously from Redis Streams, they may
+not include the most recent redirects until those events are processed.
+
+The API rate limits each client address in a 60-second fixed window: 10 link
+creations, 120 redirects, and 60 analytics requests. Exceeded requests receive
+`429` and `Retry-After`. Address values are HMACed with the configured token
+before being used as Redis keys; keys expire with the window and are not added
+to click events or application logs. Rate limiting fails closed with `503` if
+Redis or the required token is unavailable. Configure the trusted-proxy CIDRs
+carefully; never trust forwarded-address headers from untrusted peers.
 
 The analytics worker exposes its Prometheus metrics on the configured
 `URL_SHORTENER_ANALYTICS_METRICS_HOST` and
@@ -170,14 +194,22 @@ consumer-group initialization using `URL_SHORTENER_ANALYTICS_RETRY_DELAY_SECONDS
 instead of exiting.
 
 Each successful redirect schedules best-effort publication of a minimal click
-event to the configured Redis Stream. The worker stores events idempotently
-and increments `clicks_total` in the same PostgreSQL transaction, then
-acknowledges the stream entry. If processing or acknowledgement fails, the
-entry remains pending and can be reclaimed after
+event (`event_id`, short-link `code`, and UTC `clicked_at`) to the configured
+Redis Stream. The worker stores eligible raw events and updates the daily
+aggregate idempotently in the same PostgreSQL transaction, then acknowledges
+the stream entry. If processing or acknowledgement fails, the entry remains
+pending and can be reclaimed after
 `URL_SHORTENER_ANALYTICS_PENDING_IDLE_MS`. The worker logs consumer-group
 pending count and lag periodically.
 
-The worker checks trimming every
+The worker deletes raw click rows older than 90 days, aggregate day buckets
+older than 12 calendar months, and event-ID deduplication markers after the
+aggregate retention window. Cleanup runs hourly by default using
+`URL_SHORTENER_ANALYTICS_RETENTION_INTERVAL_SECONDS`. The deduplication markers
+contain only event IDs and processing timestamps so redelivered events cannot
+re-increment aggregates after their raw event row expires.
+
+The worker checks stream trimming every
 `URL_SHORTENER_ANALYTICS_STREAM_TRIM_INTERVAL_SECONDS` (default 60 seconds),
 not after each batch. It trims only old entries before the oldest pending entry
 across all consumer groups (or each group's last-delivered entry when nothing
@@ -190,18 +222,19 @@ publishes can lose that click.
 
 For a live smoke check, start the API and worker, create a fresh short link
 using the example above, and request it once. Then inspect the persisted event,
-aggregate, and pending queue:
+daily aggregate, and pending queue:
 
 ```powershell
 curl.exe -i $response.short_url
-$sql = "SELECT l.code, l.clicks_total, COUNT(e.event_id) AS stored_events FROM short_links l LEFT JOIN click_events e ON e.link_id = l.id WHERE l.code = '$($response.code)' GROUP BY l.id, l.code, l.clicks_total;"
+$sql = "SELECT l.code, COALESCE((SELECT SUM(a.clicks_total) FROM daily_click_aggregates a WHERE a.link_id = l.id), 0) AS clicks_total, (SELECT COUNT(*) FROM click_events e WHERE e.code = l.code) AS stored_events FROM short_links l WHERE l.code = '$($response.code)';"
 docker exec url-shortener-postgres psql -U postgres -d url_shortener -c $sql
 docker exec url-shortener-redis redis-cli XPENDING clicks:v1 click-analytics:v1
 ```
 
-After the asynchronous worker catches up, expect one stored event and a count
-of `1` for the new link, with no pending event. The count is eventually
-consistent; rerun the inspection if the worker has not processed the event yet.
+After the asynchronous worker catches up, expect one stored event and a daily
+aggregate count of `1` for the new link, with no pending event. The count is
+eventually consistent; rerun the inspection if the worker has not processed
+the event yet.
 
 Run the current tests with:
 
@@ -224,9 +257,9 @@ finally {
 
 The integration tests create short links, check PostgreSQL persistence, Redis
 cache and stream publication, redirect behavior, analytics/error contracts,
-and custom-alias uniqueness/redirect behavior. They use unique test data and
-remove their test link/cache/stream data afterward. The tests require the
-schema migration to be applied.
+custom-alias uniqueness/redirect behavior, and analytics authentication. They
+use unique test data and remove their test link/cache/stream data afterward.
+The tests require all schema migrations to be applied.
 
 ## Implementation and acceptance status
 
@@ -261,9 +294,12 @@ representative deployment resources and a separate load generator are
 available.
 
 This remains an assignment prototype, not a production-ready public service.
-Authentication, rate limiting, abuse/admin controls, backup/restore, deployment
-strategy, analytics privacy/retention policy, and loss-resistant click delivery
-require explicit decisions and implementation before production use. Click
+Analytics bearer authentication, endpoint rate limits, and click/aggregate
+retention are implemented per the accepted ambiguous scenario. A shared key
+does not provide per-link authorization, and rate limiting is not destination
+abuse review or link ownership/admin controls. Validate proxy configuration and
+operational secrets before public exposure. Backup/restore, deployment strategy,
+and loss-resistant click delivery still require separate decisions. Click
 publication is best effort after the redirect response; recent analytics may
 lag, and a process failure before publication can lose a click. The current
 simulated baseline approval is documented in the [business requirement](docs/01-business-requirement.md);
@@ -285,8 +321,19 @@ Avoid unrelated traffic during the measurement. Never run a capacity test
 against production.
 
 From the project root, after starting the local services and applying
-migrations, run the warm-cache workload (15-second warm-up, then 60-second
-measurement at 1,000 redirects/s and 10 creations/s):
+migrations, start or restart the API in its own PowerShell session with
+temporary elevated rate-limit thresholds. These variables must be set in the
+API process environment; setting them only in the load-generator shell has no
+effect on the running API:
+
+```powershell
+$env:URL_SHORTENER_RATE_LIMIT_REDIRECT_REQUESTS_PER_MINUTE = "120000"
+$env:URL_SHORTENER_RATE_LIMIT_CREATE_REQUESTS_PER_MINUTE = "1200"
+uvicorn url_shortener.main:app --app-dir src
+```
+
+In a separate PowerShell session, run the warm-cache workload (15-second
+warm-up, then 60-second measurement at 1,000 redirects/s and 10 creations/s):
 
 ```powershell
 python scripts\load_test.py --cache-mode warm `
@@ -303,6 +350,9 @@ python scripts\load_test.py --cache-mode cold `
   --redirects-per-second 1000 --creations-per-second 10 `
   --concurrency 500 --output docs\t110-cold-results.json
 ```
+
+Keep these elevated thresholds confined to a disposable, isolated benchmark
+environment; never use them as public-service production limits.
 
 The cold-cache run seeds one mapping per scheduled redirect so each redirect
 is a PostgreSQL-backed miss rather than warming into a repeated hit. Benchmark
@@ -360,7 +410,9 @@ the database/server connection budgets multiplied by the number of deployed
 processes; the example values are starting defaults, not load-tested capacity
 recommendations.
 
-This baseline is not ready for direct public exposure: authentication,
-rate-limiting, abuse reporting, and administrative controls remain product and
-deployment decisions. Add those controls at the application or trusted gateway
-before making creation or redirect endpoints publicly available.
+The accepted ambiguous-scenario requirements implement a shared Bearer key for
+analytics and per-client rate limits for creation, redirects, and analytics.
+They do not supply per-user/per-link authorization, destination abuse review,
+link ownership, abuse reporting, or administrative controls. Keep the service
+off public deployment until those remaining controls, trusted-proxy settings,
+secret management, and deployment safeguards are reviewed and implemented.

@@ -1,0 +1,152 @@
+{
+  "schema_version": "1.0",
+  "scenario": "ambiguous",
+  "classification_note": "Scenario is inferred by simple local keyword rules and must be confirmed by a human.",
+  "source_file": "examples\\ambiguous.txt",
+  "requirement": "Make tracking secure and safe.\n\nAnalyze this request against docs/01-business-requirement.md,\ndocs/02-requirement-analysis.md, docs/03-engineering-design.md, and the current\ncodebase. Do not guess what “secure and safe” means. Identify the key questions\nfor a human to answer, including what tracking data is required, privacy and\nretention expectations, access controls, abuse threats, and acceptable event\nloss or delay.\n\nThe current design uses Redis Streams and an asynchronous worker for click\nanalytics, and does not require storing IP addresses or user-agent values.\nTreat those as current design facts, not permission to collect additional\npersonal data. Do not propose replacing the analytics architecture unless\nanswers to the open questions justify it.\n\nAccept with the following clarified scope: “Tracking” means click analytics only. Store only the event ID, short-link code, and UTC click timestamp; do not collect IP addresses, user-agent values, or other personal data. Retain raw click events for 90 days, then delete them; retain aggregate counts for 12 months. Analytics must be accessible only to authenticated, authorized users. Treat the service as not approved for public deployment until analytics access controls and abuse protections, including rate limits, are implemented. Redirects remain independent of analytics processing. Accept the current best-effort event delivery behavior for this assignment: analytics may be delayed, and a click may be lost if the API process fails before publishing it; do not claim durable tracking. Record these as requirements, not completed features. Accepting this scope does not mean implementation or validation is complete.\n\nReturn a structured draft containing an interpretation, assumptions, open\nquestions, risks, candidate task breakdown with dependencies, tests, and\nacceptance checks. Separate confirmed requirements from options that need a\ndecision. Mark it pending human review.",
+  "summary": "Clarify what “make tracking secure and safe” means before proposing implementation changes.",
+  "functional_requirements": [
+    "Store each click event using only an event ID, short-link code, and UTC click timestamp.",
+    "Delete raw click events after 90 days and retain aggregate counts for 12 months.",
+    "Require authenticated, authorized access to analytics using the accepted shared Bearer API key.",
+    "Apply Redis-backed per-client-IP request limits of 10 link creations, 120 redirects, and 60 analytics requests per minute.",
+    "Trust forwarded client IP headers only when the immediate peer is in a configured trusted-proxy CIDR.",
+    "Keep redirects independent of analytics processing and retain best-effort event publication; click events may be delayed or lost before Redis publication."
+  ],
+  "quality_requirements": [
+    "Do not collect IP addresses, user-agent values, or other personal data in click events.",
+    "Keep the shared-key authorization boundary, rate limits, retention periods, and best-effort delivery limitation explicit.",
+    "Do not consider the service approved for public deployment until access control and abuse protections are implemented and reviewed."
+  ],
+  "assumptions": [
+    "Click tracking is the only meaning of tracking in this requirement.",
+    "A shared analytics Bearer key is sufficient for this assignment; it does not provide per-user or per-link authorization.",
+    "Per-client limits are enforced in 60-second Redis fixed windows; proxy headers are trusted only from configured networks.",
+    "Redis Streams and the asynchronous worker remain the analytics transport; redirects remain best effort.",
+    "The old lifetime aggregate has no historical per-click dates, so migration will place its value in a UTC-dated baseline bucket."
+  ],
+  "open_questions": [
+    "Which abuse-reporting, destination-review, ownership, and administrative controls are required before any public deployment?",
+    "What operational process will manage and rotate the shared analytics key and trusted-proxy configuration?",
+    "What production backup, restore, and deployment controls are required?",
+    "The accepted best-effort event-loss window remains a known limitation; no durable delivery change is requested."
+  ],
+  "risks": [
+    "A shared key allows any holder to access analytics for all links and offers no user-level authorization.",
+    "Rate limits reduce abusive request volume but do not detect or block harmful destinations or provide ownership/admin workflows.",
+    "The current best-effort publication path can lose a click if the API process fails before publishing.",
+    "The old lifetime aggregate cannot be apportioned into historical daily buckets; the migration-time baseline is temporary and not historical daily data."
+  ],
+  "ordered_tasks": [
+    {
+      "id": "T-101",
+      "title": "Clarify the security and tracking requirement",
+      "description": "Define requirements and acceptance criteria; separate confirmed scope from assumptions and open decisions.",
+      "dependencies": [],
+      "ai_assistance_point": "Use AI to trace statements to source requirements and identify gaps without silently deciding them.",
+      "human_validation": "Human review confirms scope, dependencies, and acceptance checks against the source documents."
+    },
+    {
+      "id": "T-103",
+      "title": "Create the analytics event and aggregate schema",
+      "description": "Define the raw event's event-ID/code/UTC-time fields and storage required for daily aggregates and event-ID deduplication.",
+      "dependencies": [
+        "T-101"
+      ],
+      "ai_assistance_point": "Use AI to trace event and aggregation data requirements into SQLAlchemy models, migrations, and schema tests.",
+      "human_validation": "Inspect the migrated PostgreSQL schema and verify the event table has only the accepted fields."
+    },
+    {
+      "id": "T-106",
+      "title": "Review the current analytics pipeline and delivery guarantees",
+      "description": "Implement asynchronous click-event transport and idempotent worker processing.",
+      "dependencies": [
+        "T-101",
+        "T-103"
+      ],
+      "ai_assistance_point": "Use AI to draft event processing and failure-injection tests.",
+      "human_validation": "Verify duplicate delivery, commit-before-ack, pending recovery, and disclosed loss window."
+    },
+    {
+      "id": "T-107",
+      "title": "Review the analytics API and access surface",
+      "description": "Expose the documented aggregate analytics response.",
+      "dependencies": [
+        "T-101",
+        "T-103",
+        "T-106"
+      ],
+      "ai_assistance_point": "Use AI to draft a typed response and contract tests.",
+      "human_validation": "Verify response shape, unknown-link behavior, and eventual aggregate updates."
+    },
+    {
+      "id": "T-114",
+      "title": "Approve privacy, retention, access, and durability requirements",
+      "description": "Clarify and approve tracking privacy, access, retention, and durability requirements.",
+      "dependencies": [
+        "T-101",
+        "T-106",
+        "T-107"
+      ],
+      "ai_assistance_point": "Use AI to organize interpretations, risks, and focused questions.",
+      "human_validation": "Record explicit human decisions; leave unresolved controls unimplemented."
+    },
+    {
+      "id": "T-115",
+      "title": "Implement approved analytics privacy and access controls",
+      "description": "Implement only the accepted event fields, retention windows, analytics authentication, trusted-proxy resolution, and per-client rate limits while preserving best-effort redirect delivery.",
+      "dependencies": [
+        "T-114",
+        "T-103",
+        "T-106",
+        "T-107"
+      ],
+      "ai_assistance_point": "Use AI to trace accepted requirements through models, migrations, worker, routes, middleware, settings, tests, and docs.",
+      "human_validation": "Verify event field shape, retention, auth/rate-limit responses, proxy trust behavior, data migration, and known event-loss limits."
+    },
+    {
+      "id": "T-109",
+      "title": "Verify approved behavior with tests and failure injection",
+      "description": "Add focused regression and cross-service integration tests.",
+      "dependencies": [
+        "T-115"
+      ],
+      "ai_assistance_point": "Use AI to derive test cases from requirements and failure modes.",
+      "human_validation": "Run the regular suite and configured integration suite; inspect failures."
+    },
+    {
+      "id": "T-111",
+      "title": "Document decisions, evidence, and remaining limitations",
+      "description": "Document implementation, setup, validation, decisions, risks, and limitations.",
+      "dependencies": [
+        "T-109"
+      ],
+      "ai_assistance_point": "Use AI to draft documentation from verified code and captured test output.",
+      "human_validation": "Follow clean setup instructions and verify claims against code and evidence."
+    }
+  ],
+  "tests": [
+    "Run the focused and regular pytest suites, including event field-shape, idempotency, retention, auth, rate-limit, and trusted-proxy tests.",
+    "Render both new Alembic revisions offline, then apply them and inspect the live PostgreSQL schema before claiming integration validation.",
+    "Run PostgreSQL/Redis integration tests against the migrated schema; verify analytics auth, rate-limit responses, event code payload, and worker persistence.",
+    "Confirm logs and metrics do not expose client IP, user-agent, or other unapproved tracking fields."
+  ],
+  "acceptance_checks": [
+    "Raw events and stream payloads contain only event ID, short-link code, and UTC timestamp; no personal data is collected.",
+    "Raw event, aggregate, and deduplication retention match the accepted periods.",
+    "Analytics requires the shared Bearer key, and configured rate limits/proxy trust rules are applied.",
+    "Redirects remain independent of analytics, and no durable-delivery or public-deployment claim is made."
+  ],
+  "generation": {
+    "method": "local scenario template",
+    "live_ai_model_used": false,
+    "notice": "This CLI structures a draft; it does not call an AI model or make approval decisions."
+  },
+  "human_review": {
+    "status": "reviewed",
+    "decision": "accept",
+    "reviewer": "Candidate",
+    "reviewed_at": "2026-10-12T05:10:20.558568+00:00",
+    "notes": "Accept the clarified tracking requirements: event ID/code/UTC timestamp only; no personal data; raw events retained 90 days; aggregate counts retained 12 months; shared Bearer key for analytics; Redis-backed per-client limits of 10 creations, 120 redirects, and 60 analytics requests per minute; trust forwarded IP only behind configured trusted proxies; redirects remain best-effort and independent of analytics. Acceptance is for requirements only, not implementation or validation."
+  }
+}

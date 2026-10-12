@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,24 +17,39 @@ def make_settings() -> Settings:
         database_url="postgresql+asyncpg://localhost/url_shortener",
         redis_url="redis://localhost:6379/0",
         public_base_url="https://sho.rt",
+        analytics_api_key="test-only-analytics-token-for-unit-tests-012345",
     )
 
 
-def request_analytics(session: AsyncMock, code: str = "Ab12Cd34"):
+def request_analytics(
+    session: AsyncMock,
+    code: str = "Ab12Cd34",
+    authorization: str | None = (
+        "Bearer test-only-analytics-token-for-unit-tests-012345"
+    ),
+    redis_eval_result: list[int] | None = None,
+):
     app = create_app(make_settings())
 
     async def override_session():
         yield session
 
     app.dependency_overrides[get_session] = override_session
+    redis = AsyncMock()
+    redis.eval.return_value = redis_eval_result or [1, 60]
     with (
         patch(
             "url_shortener.main.Redis.from_url",
-            return_value=AsyncMock(),
+            return_value=redis,
         ),
         TestClient(app) as client,
     ):
-        response = client.get(f"/api/v1/links/{code}/analytics")
+        headers = (
+            {"Authorization": authorization}
+            if authorization is not None
+            else {}
+        )
+        response = client.get(f"/api/v1/links/{code}/analytics", headers=headers)
     return response
 
 
@@ -55,7 +71,7 @@ def test_analytics_returns_persisted_aggregate_for_known_code() -> None:
     session.execute.assert_awaited_once()
     statement = session.execute.await_args.args[0]
     assert statement.selected_columns.keys() == ["code", "clicks_total"]
-    assert "FROM short_links" in str(statement)
+    assert "FROM short_links LEFT OUTER JOIN daily_click_aggregates" in str(statement)
 
 
 def test_analytics_returns_zero_before_any_click_is_processed() -> None:
@@ -92,3 +108,28 @@ def test_analytics_database_failure_returns_503_not_404() -> None:
     assert response.status_code == 503
     assert response.json()["error"]["code"] == "lookup_unavailable"
     session.rollback.assert_awaited_once()
+
+
+@pytest.mark.parametrize("authorization", [None, "Bearer wrong-token", "Basic test"])
+def test_analytics_requires_valid_bearer_token(
+    authorization: str | None,
+) -> None:
+    session = make_session(SimpleNamespace(code="Ab12Cd34", clicks_total=7))
+
+    response = request_analytics(session, authorization=authorization)
+
+    assert response.status_code == 401
+    assert response.headers["www-authenticate"] == "Bearer"
+    assert response.json()["error"]["code"] == "authentication_required"
+    session.execute.assert_not_awaited()
+
+
+def test_analytics_returns_429_with_retry_after_when_limited() -> None:
+    session = make_session(SimpleNamespace(code="Ab12Cd34", clicks_total=7))
+
+    response = request_analytics(session, redis_eval_result=[61, 23])
+
+    assert response.status_code == 429
+    assert response.headers["retry-after"] == "23"
+    assert response.json()["error"]["code"] == "rate_limit_exceeded"
+    session.execute.assert_not_awaited()

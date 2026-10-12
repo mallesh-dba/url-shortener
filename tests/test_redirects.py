@@ -20,6 +20,7 @@ def make_settings() -> Settings:
         database_url="postgresql+asyncpg://localhost/url_shortener",
         redis_url="redis://localhost:6379/0",
         public_base_url="https://sho.rt",
+        analytics_api_key="test-only-analytics-token-for-unit-tests-012345",
     )
 
 
@@ -51,6 +52,7 @@ def request_redirect(
         yield session
 
     app.dependency_overrides[get_session] = override_session
+    redis_client.eval.return_value = [1, 60]
     with (
         patch("url_shortener.main.Redis.from_url", return_value=redis_client),
         TestClient(app, follow_redirects=False) as client,
@@ -109,8 +111,8 @@ def test_redirect_publishes_a_click_event_in_background() -> None:
     redis_client.xadd.assert_awaited_once()
     stream, fields = redis_client.xadd.await_args.args
     assert stream == "clicks:v1"
-    assert fields["link_id"] == str(link.id)
-    assert set(fields) == {"event_id", "link_id", "clicked_at"}
+    assert fields["code"] == link.code
+    assert set(fields) == {"event_id", "code", "clicked_at"}
 
 
 def test_redirect_cache_miss_reads_database_and_populates_cache() -> None:

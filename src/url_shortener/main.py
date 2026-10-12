@@ -34,6 +34,14 @@ from url_shortener.observability import (
     configure_structured_logging,
     observe_database_pool,
 )
+from url_shortener.security import (
+    AnalyticsAuthenticationRequired,
+    AnalyticsAuthenticationUnavailable,
+    InvalidClientAddress,
+    RateLimitExceeded,
+    RateLimitUnavailable,
+    enforce_rate_limit,
+)
 
 SUPPORTED_HTTP_METHODS = frozenset(
     {
@@ -112,6 +120,67 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         version="0.1.0",
         lifespan=lifespan,
     )
+
+    @application.middleware("http")
+    async def enforce_public_rate_limits(
+        request: Request,
+        call_next: RequestResponseEndpoint,
+    ) -> Response:
+        category: str | None = None
+        if request.method == "POST" and request.url.path == "/api/v1/shorten":
+            category = "create"
+        elif (
+            request.method == "GET"
+            and request.url.path.startswith("/api/v1/links/")
+            and request.url.path.endswith("/analytics")
+        ):
+            category = "analytics"
+        elif (
+            request.method == "GET"
+            and request.url.path.count("/") == 1
+            and request.url.path != "/"
+        ):
+            category = "redirect"
+
+        if category is None:
+            return await call_next(request)
+        try:
+            await enforce_rate_limit(request, category)
+        except InvalidClientAddress:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "error": {
+                        "code": "invalid_client_address",
+                        "message": "Client address could not be determined safely",
+                        "details": None,
+                    }
+                },
+            )
+        except RateLimitExceeded as error:
+            return JSONResponse(
+                status_code=429,
+                headers={"Retry-After": str(error.retry_after_seconds)},
+                content={
+                    "error": {
+                        "code": "rate_limit_exceeded",
+                        "message": "Request rate limit exceeded",
+                        "details": None,
+                    }
+                },
+            )
+        except RateLimitUnavailable:
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "error": {
+                        "code": "rate_limit_unavailable",
+                        "message": "Rate-limit service is temporarily unavailable",
+                        "details": None,
+                    }
+                },
+            )
+        return await call_next(request)
 
     @application.middleware("http")
     async def observe_request(
@@ -233,6 +302,92 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "error": {
                     "code": "link_not_found",
                     "message": "Short link was not found",
+                    "details": None,
+                }
+            },
+        )
+
+    @application.exception_handler(AnalyticsAuthenticationRequired)
+    async def analytics_authentication_required(
+        request: Request,
+        error: AnalyticsAuthenticationRequired,
+    ) -> JSONResponse:
+        _ = error
+        return JSONResponse(
+            status_code=401,
+            headers={"WWW-Authenticate": "Bearer"},
+            content={
+                "error": {
+                    "code": "authentication_required",
+                    "message": "A valid bearer token is required",
+                    "details": None,
+                }
+            },
+        )
+
+    @application.exception_handler(AnalyticsAuthenticationUnavailable)
+    async def analytics_authentication_unavailable(
+        request: Request,
+        error: AnalyticsAuthenticationUnavailable,
+    ) -> JSONResponse:
+        _ = error
+        return JSONResponse(
+            status_code=503,
+            content={
+                "error": {
+                    "code": "authentication_not_configured",
+                    "message": "Analytics authentication is not configured",
+                    "details": None,
+                }
+            },
+        )
+
+    @application.exception_handler(RateLimitExceeded)
+    async def rate_limit_exceeded(
+        request: Request,
+        error: RateLimitExceeded,
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=429,
+            headers={"Retry-After": str(error.retry_after_seconds)},
+            content={
+                "error": {
+                    "code": "rate_limit_exceeded",
+                    "message": "Request rate limit exceeded",
+                    "details": None,
+                }
+            },
+        )
+
+    @application.exception_handler(RateLimitUnavailable)
+    async def rate_limit_unavailable(
+        request: Request,
+        error: RateLimitUnavailable,
+    ) -> JSONResponse:
+        _ = error
+        return JSONResponse(
+            status_code=503,
+            content={
+                "error": {
+                    "code": "rate_limit_unavailable",
+                    "message": "Rate-limit service is temporarily unavailable",
+                    "details": None,
+                }
+            },
+        )
+
+    @application.exception_handler(InvalidClientAddress)
+    async def invalid_client_address(
+        request: Request,
+        error: InvalidClientAddress,
+    ) -> JSONResponse:
+        _ = error
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": {
+                    "code": "invalid_client_address",
+                    "message": "Client address could not be determined safely",
                     "details": None,
                 }
             },

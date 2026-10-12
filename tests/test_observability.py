@@ -22,6 +22,7 @@ def make_settings() -> Settings:
         database_url="postgresql+asyncpg://localhost/url_shortener",
         redis_url="redis://localhost:6379/0",
         public_base_url="https://sho.rt",
+        analytics_api_key="test-only-observability-analytics-token-012345",
     )
 
 
@@ -34,6 +35,7 @@ def test_public_app_does_not_expose_metrics_and_labels_stay_bounded() -> None:
             "destination_url": "https://example.com/private?token=secret",
         }
     )
+    redis_client.eval.return_value = [1, 60]
     app = create_app(make_settings())
 
     async def override_session():

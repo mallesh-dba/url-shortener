@@ -1,16 +1,18 @@
 import json
 import logging
 import secrets
+from datetime import UTC, datetime
 from typing import Protocol
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from pydantic import ValidationError
 from redis.exceptions import RedisError
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from url_shortener.config import Settings
-from url_shortener.models import ShortLink
+from url_shortener.models import DailyClickAggregate, ShortLink
+from url_shortener.retention import months_before
 from url_shortener.observability import CACHE_OPERATIONS, CODE_COLLISION_RETRIES
 from url_shortener.schemas import ShortLinkCreateRequest
 
@@ -46,12 +48,28 @@ class ShortLinkNotFound(Exception):
 async def get_link_analytics(
     session: AsyncSession,
     code: str,
+    aggregate_retention_months: int = 12,
 ) -> tuple[str, int]:
+    cutoff_date = months_before(
+        datetime.now(UTC).date(),
+        aggregate_retention_months,
+    )
     try:
         result = await session.execute(
-            select(ShortLink.code, ShortLink.clicks_total).where(
-                ShortLink.code == code
+            select(
+                ShortLink.code,
+                func.coalesce(
+                    func.sum(DailyClickAggregate.clicks_total),
+                    0,
+                ).label("clicks_total"),
             )
+            .outerjoin(
+                DailyClickAggregate,
+                (DailyClickAggregate.link_id == ShortLink.id)
+                & (DailyClickAggregate.bucket_date >= cutoff_date),
+            )
+            .where(ShortLink.code == code)
+            .group_by(ShortLink.id, ShortLink.code)
         )
         link_analytics = result.one_or_none()
     except (SQLAlchemyError, OSError, TimeoutError) as error:

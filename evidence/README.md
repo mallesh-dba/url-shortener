@@ -17,5 +17,6 @@ be verbatim transcripts of earlier assistant turns that were not saved.
 | Ambiguous | [Prompt and response](ambiguous/ai-analysis.md) | [Review record](ambiguous/human-review.md) | [Checks](ambiguous/validation.md) |
 
 Human decisions are recorded only when supported by the review artifacts or
-user confirmation. The ambiguous request remains pending clarification. Local
+user confirmation. The ambiguous scenario requirements are accepted, while
+implementation's live PostgreSQL/Redis validation remains pending. Local
 benchmark results do not meet Q-6/Q-7 and are not represented as accepted.

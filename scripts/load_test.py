@@ -24,7 +24,12 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from url_shortener.config import Settings, get_settings
-from url_shortener.models import ClickEvent, ShortLink
+from url_shortener.models import (
+    ClickEvent,
+    DailyClickAggregate,
+    ProcessedClickEvent,
+    ShortLink,
+)
 
 
 BASE62 = string.digits + string.ascii_uppercase + string.ascii_lowercase
@@ -423,7 +428,7 @@ async def count_test_events(
             return int(
                 await connection.scalar(
                     select(func.count(ClickEvent.event_id))
-                    .join(ShortLink, ShortLink.id == ClickEvent.link_id)
+                    .join(ShortLink, ShortLink.code == ClickEvent.code)
                     .where(
                         ShortLink.destination_url.startswith(
                             f"https://example.com/{marker}/"
@@ -457,6 +462,7 @@ async def cleanup_test_data(
                 )
             ).all()
         link_ids = {int(row.id) for row in rows}
+        link_codes = {str(row.code) for row in rows}
         cache_keys = [f"short:v1:{row.code}" for row in rows]
         if cache_keys:
             for start in range(0, len(cache_keys), 1000):
@@ -479,8 +485,7 @@ async def cleanup_test_data(
             matching_ids = [
                 entry_id
                 for entry_id, fields in entries
-                if fields.get("link_id", "").isdigit()
-                and int(fields["link_id"]) in link_ids
+                if fields.get("code") in link_codes
             ]
             if matching_ids:
                 await redis_client.xdel(
@@ -493,9 +498,25 @@ async def cleanup_test_data(
             benchmark_link_ids = select(ShortLink.id).where(
                 ShortLink.destination_url.startswith(prefix)
             )
+            benchmark_codes = select(ShortLink.code).where(
+                ShortLink.destination_url.startswith(prefix)
+            )
+            benchmark_event_ids = select(ClickEvent.event_id).where(
+                ClickEvent.code.in_(benchmark_codes)
+            )
             async with engine.begin() as connection:
                 await connection.execute(
-                    delete(ClickEvent).where(ClickEvent.link_id.in_(benchmark_link_ids))
+                    delete(ProcessedClickEvent).where(
+                        ProcessedClickEvent.event_id.in_(benchmark_event_ids)
+                    )
+                )
+                await connection.execute(
+                    delete(ClickEvent).where(ClickEvent.code.in_(benchmark_codes))
+                )
+                await connection.execute(
+                    delete(DailyClickAggregate).where(
+                        DailyClickAggregate.link_id.in_(benchmark_link_ids)
+                    )
                 )
                 await connection.execute(
                     delete(ShortLink).where(

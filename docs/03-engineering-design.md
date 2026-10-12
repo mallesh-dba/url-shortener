@@ -10,28 +10,30 @@ This design covers link creation, persistent storage, redirects, and click analy
 
 The requirement analysis currently says that no stack is mandated. This design treats the stack listed in the design request as a constraint for this architecture only. If the stack is intended to be a confirmed project requirement, update the requirement analysis and approval record separately.
 
-The service does not fetch destination URLs; it validates and stores them, then redirects visitors. Only absolute `http` and `https` destinations are accepted. The minimum behavior generates short codes; custom aliases are implemented as an optional, separately accepted brownfield extension documented below. Authentication, link updates/deletion, expiration, and analytics retention remain outside scope.
+The service does not fetch destination URLs; it validates and stores them, then redirects visitors. Only absolute `http` and `https` destinations are accepted. The minimum behavior generates short codes; custom aliases are implemented as an optional, separately accepted brownfield extension documented below. The accepted ambiguous-scenario extension adds analytics authentication, per-client rate limiting, and bounded analytics retention. Link updates/deletion, expiration, ownership, destination abuse review, and loss-resistant event delivery remain outside scope.
 
 ## 2. High-Level Architecture
 
 ```mermaid
 flowchart LR
     Client[API client / browser] --> API[FastAPI application]
-    API --> Validator[Request validation]
+    API --> Validator[Validation and rate limiting]
     Validator --> PG[(PostgreSQL)]
     API <--> Cache[(Redis link cache)]
     API -. background click publication .-> Stream[(Redis Stream)]
     Stream --> Worker[Async analytics worker]
     Worker --> PG
+    API --> Auth[Analytics bearer authentication]
     API --> Redirect[HTTP redirect]
 ```
 
 ### Components
 
 - **FastAPI application:** Provides link creation, redirect, and analytics endpoints. Request handlers use asynchronous SQLAlchemy sessions and Redis clients.
-- **PostgreSQL:** Stores short-link mappings, aggregate click counts, and click events. It remains authoritative when the cache is empty or unavailable.
+- **PostgreSQL:** Stores short-link mappings, raw click events, daily aggregates, and event-ID deduplication markers. It remains authoritative when the cache is empty or unavailable.
 - **Redis cache:** Holds frequently resolved short-code mappings with a finite TTL. Cache loss affects performance, not correctness.
-- **Redis Stream and analytics worker:** Buffers click events for asynchronous persistence. The worker uses a consumer group, stores each event, updates the link's aggregate count, and acknowledges the event after the database transaction commits.
+- **Redis Stream and analytics worker:** Buffers events containing only event ID, short-link code, and UTC click timestamp. The worker resolves the code to its internal link ID for aggregation, stores the raw event within its retention window, updates the daily aggregate, records an idempotency marker, and acknowledges after the transaction commits.
+- **Analytics access and rate limits:** Analytics requires the configured shared Bearer key. Redis-backed fixed-window limits apply per client address; forwarded addresses are used only behind explicitly configured trusted proxies.
 
 ## 3. Data Flows
 
@@ -63,8 +65,8 @@ sequenceDiagram
 2. FastAPI looks up `short:v1:{code}` in Redis.
 3. On a cache miss, it reads PostgreSQL and populates Redis. An unknown code returns `404 Not Found`.
 4. For a known code, the service schedules a FastAPI background task to publish a click event to the Redis Stream, then returns a `302 Found` redirect to the stored URL. A temporary redirect avoids browsers permanently caching the mapping and bypassing future analytics.
-5. An analytics worker reads the stream. In one PostgreSQL transaction it inserts the event idempotently and increments the link's total click count only if the event was newly inserted. It acknowledges the stream entry only after commit.
-6. `GET /api/v1/links/{code}/analytics` reads the aggregate count; optional time-series reporting can query the event table using its link-and-time index.
+5. An analytics worker reads the stream. In one PostgreSQL transaction it records the event ID for deduplication, inserts the raw event if it is inside the 90-day window, and increments the event date's daily aggregate if it is inside the 12-month window. It acknowledges the stream entry only after commit.
+6. `GET /api/v1/links/{code}/analytics` requires a valid shared Bearer key and sums the retained daily aggregates over the trailing 12 calendar months.
 
 ```mermaid
 sequenceDiagram
@@ -86,7 +88,7 @@ sequenceDiagram
     A-->>B: 302 Location: destination URL
     A->>R: Background task XADD click event
     W->>R: Read stream entry
-    W->>P: Insert event + increment count in transaction
+    W->>P: Deduplicate event + persist raw event + update daily aggregate
     W->>R: Acknowledge after commit
 ```
 
@@ -96,11 +98,11 @@ The task is scheduled as part of the response handling; a process crash before t
 
 | Method and path | Behavior | Success / errors |
 |---|---|---|
-| `POST /api/v1/shorten` | Validate and create a short link. Request body: `{"destination_url":"https://example.com/path","custom_alias":"summer-sale"}`; `custom_alias` is optional. | `201` with `code`, `short_url`, and `created_at`; `422` for invalid input; `409` (`short_code_conflict`) if a custom alias is already used; `503` if persistence is unavailable. `short_url` uses the configured `URL_SHORTENER_PUBLIC_BASE_URL` origin. |
-| `GET /{code}` | Resolve a short code and redirect. | `302` with `Location`; `404` only after PostgreSQL confirms no mapping; `503` when the database lookup fails. |
-| `GET /api/v1/links/{code}/analytics` | Retrieve click analytics. | `200` with `code` and `clicks_total`; `404` for an unknown code; `503` when PostgreSQL lookup fails. `clicks_total` is an asynchronously updated aggregate and may lag recent redirects. |
+| `POST /api/v1/shorten` | Validate and create a short link. Request body: `{"destination_url":"https://example.com/path","custom_alias":"summer-sale"}`; `custom_alias` is optional. Rate limited per client address (10/minute). | `201` with `code`, `short_url`, and `created_at`; `422` for invalid input; `409` (`short_code_conflict`) if a custom alias is already used; `429` when limited; `503` if persistence/rate limiting is unavailable. `short_url` uses the configured `URL_SHORTENER_PUBLIC_BASE_URL` origin. |
+| `GET /{code}` | Resolve a short code and redirect. Rate limited per client address (120/minute). | `302` with `Location`; `404` only after PostgreSQL confirms no mapping; `429` when limited; `503` when the database lookup or rate limiting fails. |
+| `GET /api/v1/links/{code}/analytics` | Retrieve click analytics over the trailing 12 calendar months. Requires the configured shared Bearer key and is rate limited per client address (60/minute). | `200` with `code` and `clicks_total`; `401` for missing/invalid key; `404` for an unknown code; `429` when limited; `503` when PostgreSQL, Redis rate limiting, or analytics authentication configuration is unavailable. Aggregates are asynchronous and may lag recent redirects. |
 
-Errors use the JSON shape `{"error":{"code":"...","message":"...","details":...}}`. Authentication and rate limiting are not specified by the assignment and must be decided before exposing the service publicly.
+Errors use the JSON shape `{"error":{"code":"...","message":"...","details":...}}`. Rate limits use a 60-second fixed window. Configure `URL_SHORTENER_ANALYTICS_API_KEY` with a private random value of at least 32 characters. Analytics uses one shared key and does not provide per-user or per-link authorization. Rate-limit keys contain an HMAC of the resolved client address and expire with the window. Forwarded addresses are honored only when the immediate peer is in `URL_SHORTENER_TRUSTED_PROXY_CIDRS`; otherwise proxy headers are ignored. Keep the service off public deployment until remaining abuse, ownership, and administrative controls are addressed.
 
 ### 4.1 Accepted custom-alias extension
 
@@ -128,27 +130,42 @@ generated Base62 behavior and response shape.
 | `code` | `VARCHAR(16)` | Not null, unique; public short code. Generate 8 random Base62 characters initially; retry on uniqueness conflict. |
 | `destination_url` | `TEXT` | Not null; validated absolute HTTP(S) URL. |
 | `created_at` | `TIMESTAMPTZ` | Not null, default `now()`. |
-| `clicks_total` | `BIGINT` | Not null, default `0`; updated by the analytics worker. |
 
 ### `click_events`
 
 | Column | Type | Constraints / purpose |
 |---|---|---|
 | `event_id` | `UUID` | Primary key; generated when the click event is created and used for idempotency. |
-| `link_id` | `BIGINT` | Not null; foreign key to `short_links.id`. |
+| `code` | `VARCHAR(16)` | Not null; foreign key to the unique public short-link code. |
 | `clicked_at` | `TIMESTAMPTZ` | Not null; event time in UTC. |
 
-Do not store IP addresses or user-agent values in the initial design; they are not required and create privacy and retention obligations.
+The raw event stores only its ID, short-link code, and UTC timestamp. It does
+not store IP addresses, user-agent values, or other personal data.
+
+### `daily_click_aggregates` and `processed_click_event_ids`
+
+`daily_click_aggregates` has `(link_id, bucket_date)` as its primary key and
+stores the count for that link and UTC day. Rows older than 12 calendar months
+are removed. `processed_click_event_ids` stores only event ID and processing
+timestamp, preventing redeliveries from incrementing a rollup after the raw
+event expires; markers older than the aggregate retention horizon are removed.
 
 ### Indexes and query rationale
 
 - Unique B-tree index on `short_links(code)` supports both collision prevention and direct code lookup. PostgreSQL creates this index for the unique constraint.
-- Primary key on `short_links(id)` supports the event foreign key and worker updates.
+- Primary key on `short_links(id)` supports aggregate foreign keys and worker updates.
 - Primary key on `click_events(event_id)` makes event processing idempotent.
-- Composite B-tree index on `click_events(link_id, clicked_at DESC)` supports per-link time-range analytics.
+- Composite B-tree index on `click_events(code, clicked_at DESC)` supports per-link raw-event queries.
+- Index on `processed_click_event_ids(processed_at)` supports retention cleanup.
 - Avoid extra indexes until a query or measured workload requires them; each index adds write and storage cost.
 
-For high event volume, time partitioning and retention/archival can be introduced after defining analytics retention requirements. The aggregate `clicks_total` provides a low-cost total-count response; time-series analytics use the event table.
+The analytics response sums daily aggregates inside the configured 12-calendar-
+month horizon. Migration `20261012_01` seeds each existing lifetime total into
+a baseline bucket dated on migration day; that legacy total remains visible
+for up to 12 months after migration while new clicks accrue in their actual
+daily buckets. This is a transition baseline, not reconstructed historical
+daily data. Migration `20261012_02` converts existing raw-event references to
+short codes.
 
 ## 6. Redis Cache and Telemetry
 
@@ -163,14 +180,14 @@ For high event volume, time partitioning and retention/archival can be introduce
 
 ### Click event stream and worker
 
-- FastAPI `BackgroundTasks` publishes a minimal event (`event_id`, `link_id`, `clicked_at`) to a Redis Stream after the redirect response is sent.
-- A separate async worker consumes through a Redis consumer group. It commits the event insert and counter increment in a single PostgreSQL transaction, then acknowledges the stream item.
+- FastAPI `BackgroundTasks` publishes only (`event_id`, `code`, `clicked_at`) to a Redis Stream after the redirect response is sent. The raw click table stores those same three fields and no IP address or user-agent.
+- A separate async worker consumes through a Redis consumer group. It commits the idempotency marker, eligible raw event, and daily aggregate update in one PostgreSQL transaction, then acknowledges the stream item.
 - Retry consumer-group initialization and stream operations after Redis connection failures so the independently run worker can recover without an external restart.
 - The worker uses `XAUTOCLAIM` and `XTRIM MINID`, requiring Redis 6.2 or newer.
-- If a worker fails before commit, the item remains pending for retry. The unique `event_id` prevents duplicate increments on retry. Configure pending-entry recovery and monitor stream lag.
+- If a worker fails before commit, the item remains pending for retry. The event-ID deduplication ledger prevents duplicate increments on retry. Raw rows are removed after 90 days; daily aggregate buckets and deduplication markers are retained for 12 calendar months.
 - Check trimming periodically, not after every worker batch. Trim only an acknowledged prefix, bounded by the oldest pending entry and the configured recent-entry window. Cache the boundary only when it actually limits the trim; if the recent-entry retention boundary limits it, recheck that boundary on the next scheduled trim. Never trim unprocessed or pending events; a stalled entry may therefore cause the stream to exceed its target maximum length. This prototype policy is count-based, and production retention should be reviewed against analytics and Redis durability requirements.
 - Redis persistence and replication should be configured to match the required durability; Redis is not a substitute for the PostgreSQL record.
-- Monitor background publish failures, pending event count, processing lag, database transaction failures, and rejected/invalid destination URLs.
+- Monitor background publish failures, pending event count, processing lag, database transaction failures, and rejected/invalid destination URLs. Rate-limit identifiers are HMACed and short-lived; do not log IP addresses or use them in metric labels.
 
 ## 7. Runtime and Failure Handling
 
@@ -184,7 +201,8 @@ For high event volume, time partitioning and retention/archival can be introduce
 
 - Accept only absolute HTTP and HTTPS destinations; reject malformed URLs and other schemes. The service does not dereference the destination during creation, reducing server-side request forgery exposure.
 - Use parameterized SQL through SQLAlchemy, keep credentials in environment/secret management, and avoid logging full URLs if they may contain sensitive query values.
-- Random codes reduce easy enumeration compared with sequential identifiers, but do not replace authentication, abuse prevention, or rate limiting.
+- Analytics requires a configured shared Bearer key. Fixed-window rate limits are enforced through Redis at 10 creations, 120 redirects, and 60 analytics requests per client per minute; they fail closed if Redis is unavailable. They do not replace destination abuse review, link ownership, or administrative controls.
+- Use `URL_SHORTENER_TRUSTED_PROXY_CIDRS` only for known reverse-proxy networks. Ignore forwarded client-address headers from untrusted peers. HMAC client addresses for rate-limit keys and do not write them to events, logs, or metric labels.
 - Scale API processes horizontally behind a load balancer; PostgreSQL and Redis are shared services. Use pool sizing, database query monitoring, and cache hit-rate measurements to find bottlenecks.
 - Add structured request logs and metrics for create/redirect/analytics latency, status codes, cache hit/miss/error counts, code collision retries, database pool utilization, event enqueue errors, and worker lag. Do not use the short code or destination URL as high-cardinality metric labels.
 
@@ -221,14 +239,14 @@ For high event volume, time partitioning and retention/archival can be introduce
 | Random Base62 code with unique constraint and retry | Avoids exposing sequential IDs and handles collisions safely. | Code length and retry limits are design parameters; collisions must be monitored. |
 | Cache-aside with a one-hour configurable TTL | Simple and resilient for immutable mappings. | Changes would be stale until invalidation or TTL expiry. |
 | FastAPI background task publishes analytics to Redis Stream | Keeps PostgreSQL event writes outside the redirect's critical path and supports asynchronous consumers. | A process failure before publish can lose a click; use synchronous stream publication or an outbox if loss is unacceptable. |
-| Aggregate click count plus raw event table | Fast total-count response while preserving data for time-based reporting. | Counter is eventually consistent; raw event storage requires a retention/partitioning policy. |
+| Daily click aggregates plus bounded raw events | Fast total-count response over a trailing 12-calendar-month window, with raw event data available for 90 days. | Counts are eventually consistent. Existing lifetime totals are migrated into one baseline bucket dated at migration time because their historical dates are unavailable. |
 | `302 Found` redirects | Temporary redirect avoids permanent client caching and supports measuring repeat visits. | Adds a service request on each visit; clients may still cache according to headers. |
 
 ## 11. Decisions Required Before Production
 
-- Benchmark environment, duration, warm/cold cache criteria, availability target, and analytics data retention period.
+- Benchmark environment, duration, warm/cold cache criteria, and availability target.
 - Whether analytics may be best-effort or must be loss-resistant.
-- Authentication, rate limiting, abuse reporting, and administrative link controls.
+- Abuse reporting, destination controls, and administrative link controls beyond the implemented shared analytics key and request limits.
 - Expiration, deletion, custom aliases, and link update semantics.
 - Whether analytics needs per-day breakdowns, and which data may be collected.
 - Production Redis durability, PostgreSQL backup/restore, migration, and deployment strategy.

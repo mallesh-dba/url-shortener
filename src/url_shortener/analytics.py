@@ -3,19 +3,24 @@ import logging
 import socket
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Protocol
 from uuid import UUID, uuid4
 
 from prometheus_client import start_http_server
 from redis.exceptions import RedisError, ResponseError
-from sqlalchemy import update
+from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from url_shortener.config import Settings, get_settings
-from url_shortener.models import ClickEvent, ShortLink
+from url_shortener.models import (
+    ClickEvent,
+    DailyClickAggregate,
+    ProcessedClickEvent,
+    ShortLink,
+)
 from url_shortener.observability import (
     ANALYTICS_PENDING_EVENTS,
     ANALYTICS_PROCESSED_EVENTS,
@@ -27,13 +32,12 @@ from url_shortener.observability import (
     configure_structured_logging,
     observe_database_pool,
 )
+from url_shortener.retention import months_before
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_STREAM_NAME = "clicks:v1"
 DEFAULT_CONSUMER_GROUP = "click-analytics:v1"
-
-
 class ClickStreamClient(Protocol):
     async def xadd(
         self,
@@ -103,12 +107,12 @@ class ClickStreamClient(Protocol):
 
 async def publish_click_event(
     redis_client: ClickStreamClient,
-    link_id: int,
+    code: str,
     stream_name: str = DEFAULT_STREAM_NAME,
 ) -> None:
     fields = {
         "event_id": str(uuid4()),
-        "link_id": str(link_id),
+        "code": code,
         "clicked_at": datetime.now(UTC).isoformat(),
     }
     try:
@@ -135,15 +139,25 @@ def _field(fields: Mapping[str | bytes, str | bytes], key: str) -> str:
 
 def _parse_click_event(
     fields: Mapping[str | bytes, str | bytes],
-) -> tuple[UUID, int, datetime]:
+) -> tuple[UUID, str | int, datetime]:
     event_id = UUID(_field(fields, "event_id"))
-    link_id = int(_field(fields, "link_id"))
-    if link_id < 1:
-        raise ValueError("Click event link_id must be positive")
+    try:
+        code: str | int = _field(fields, "code")
+        if not 1 <= len(code) <= 16:
+            raise ValueError("Click event code must contain 1 to 16 characters")
+    except ValueError as error:
+        if "code" in fields or b"code" in fields:
+            raise
+        try:
+            code = int(_field(fields, "link_id"))
+        except ValueError:
+            raise error
+        if code < 1:
+            raise ValueError("Legacy click event link_id must be positive")
     clicked_at = datetime.fromisoformat(_field(fields, "clicked_at"))
     if clicked_at.tzinfo is None or clicked_at.utcoffset() is None:
         raise ValueError("Click event clicked_at must include a timezone")
-    return event_id, link_id, clicked_at.astimezone(UTC)
+    return event_id, code, clicked_at.astimezone(UTC)
 
 
 async def ensure_consumer_group(
@@ -279,36 +293,81 @@ class ClickAnalyticsWorker:
         self.pending_cursor = "0-0"
         self.trim_state = StreamTrimState()
         self.next_trim_at: float | None = None
+        self.next_retention_at: float | None = None
 
     async def persist_and_ack(
         self,
         stream_id: str,
         fields: Mapping[str | bytes, str | bytes],
     ) -> None:
-        event_id, link_id, clicked_at = _parse_click_event(fields)
+        event_id, event_code, clicked_at = _parse_click_event(fields)
+        now = datetime.now(UTC)
+        raw_cutoff = now - timedelta(
+            days=self.settings.analytics_raw_retention_days
+        )
+        aggregate_cutoff = months_before(
+            now.date(),
+            self.settings.analytics_aggregate_retention_months,
+        )
         async with self.session_factory() as session:
             async with session.begin():
+                if isinstance(event_code, int):
+                    link_result = await session.execute(
+                        select(ShortLink.code).where(
+                            ShortLink.id == event_code
+                        )
+                    )
+                    code = link_result.scalar_one_or_none()
+                    link_id = event_code
+                else:
+                    code = event_code
+                    link_result = await session.execute(
+                        select(ShortLink.id).where(ShortLink.code == code)
+                    )
+                    link_id = link_result.scalar_one_or_none()
+                if link_id is None:
+                    raise ValueError(
+                        "Click event references an unknown short-link code"
+                    )
+                if code is None:
+                    raise ValueError(
+                        "Legacy click event references an unknown link ID"
+                    )
                 inserted = await session.execute(
-                    insert(ClickEvent)
-                    .values(
-                        event_id=event_id,
-                        link_id=link_id,
-                        clicked_at=clicked_at,
-                    )
+                    insert(ProcessedClickEvent)
+                    .values(event_id=event_id)
                     .on_conflict_do_nothing(
-                        index_elements=[ClickEvent.event_id]
+                        index_elements=[ProcessedClickEvent.event_id]
                     )
-                    .returning(ClickEvent.event_id)
+                    .returning(ProcessedClickEvent.event_id)
                 )
                 if inserted.scalar_one_or_none() is not None:
-                    updated = await session.execute(
-                        update(ShortLink)
-                        .where(ShortLink.id == link_id)
-                        .values(clicks_total=ShortLink.clicks_total + 1)
-                    )
-                    if updated.rowcount != 1:
-                        raise ValueError(
-                            "Click event references a missing short link"
+                    if clicked_at >= raw_cutoff:
+                        await session.execute(
+                            insert(ClickEvent).values(
+                                event_id=event_id,
+                                code=code,
+                                clicked_at=clicked_at,
+                            )
+                        )
+                    if clicked_at.date() >= aggregate_cutoff:
+                        aggregate_insert = insert(DailyClickAggregate).values(
+                            link_id=link_id,
+                            bucket_date=clicked_at.date(),
+                            clicks_total=1,
+                        )
+                        await session.execute(
+                            aggregate_insert.on_conflict_do_update(
+                                index_elements=[
+                                    DailyClickAggregate.link_id,
+                                    DailyClickAggregate.bucket_date,
+                                ],
+                                set_={
+                                    "clicks_total": (
+                                        DailyClickAggregate.clicks_total + 1
+                                    )
+                                },
+                            )
                         )
         await self.redis_client.xack(
             self.stream_name,
@@ -364,6 +423,27 @@ class ClickAnalyticsWorker:
             now + self.settings.analytics_stream_trim_interval_seconds
         )
         return trimmed
+
+    async def cleanup_retained_analytics_if_due(self, now: float) -> None:
+        if (
+            self.next_retention_at is not None
+            and now < self.next_retention_at
+        ):
+            return
+        try:
+            await cleanup_expired_analytics(
+                self.session_factory,
+                self.settings,
+            )
+        except SQLAlchemyError:
+            logger.exception("Analytics retention cleanup failed")
+            self.next_retention_at = (
+                now + self.settings.analytics_retry_delay_seconds
+            )
+            return
+        self.next_retention_at = (
+            now + self.settings.analytics_retention_interval_seconds
+        )
 
     async def recover_pending(self) -> int:
         next_cursor, messages, _ = await self.redis_client.xautoclaim(
@@ -439,6 +519,7 @@ class ClickAnalyticsWorker:
                 await self.read_new()
                 now = asyncio.get_running_loop().time()
                 await self.trim_if_due(now)
+                await self.cleanup_retained_analytics_if_due(now)
                 if now >= next_lag_report:
                     await self.report_lag()
                     next_lag_report = now + (
@@ -450,6 +531,46 @@ class ClickAnalyticsWorker:
                 await asyncio.sleep(
                     self.settings.analytics_retry_delay_seconds
                 )
+
+
+async def cleanup_expired_analytics(
+    session_factory: async_sessionmaker[AsyncSession],
+    settings: Settings,
+    now: datetime | None = None,
+) -> tuple[int, int, int]:
+    current_time = now or datetime.now(UTC)
+    raw_cutoff = current_time - timedelta(
+        days=settings.analytics_raw_retention_days
+    )
+    aggregate_cutoff = months_before(
+        current_time.date(),
+        settings.analytics_aggregate_retention_months,
+    )
+    dedupe_cutoff = datetime.combine(
+        aggregate_cutoff,
+        datetime.min.time(),
+        tzinfo=UTC,
+    )
+    async with session_factory() as session:
+        async with session.begin():
+            raw_result = await session.execute(
+                delete(ClickEvent).where(ClickEvent.clicked_at < raw_cutoff)
+            )
+            aggregate_result = await session.execute(
+                delete(DailyClickAggregate).where(
+                    DailyClickAggregate.bucket_date < aggregate_cutoff
+                )
+            )
+            dedupe_result = await session.execute(
+                delete(ProcessedClickEvent).where(
+                    ProcessedClickEvent.processed_at < dedupe_cutoff
+                )
+            )
+    return (
+        raw_result.rowcount or 0,
+        aggregate_result.rowcount or 0,
+        dedupe_result.rowcount or 0,
+    )
 
 
 async def run_worker(settings: Settings | None = None) -> None:
