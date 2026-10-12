@@ -1,0 +1,103 @@
+{
+  "schema_version": "1.0",
+  "scenario": "brownfield",
+  "classification_note": "Scenario is inferred by simple local keyword rules and must be confirmed by a human.",
+  "source_file": "examples\\brownfield.txt",
+  "requirement": "Extend the existing URL-shortener service to support an optional custom alias\nwhen creating a link. Analyze the change against docs/01-business-requirement.md,\ndocs/02-requirement-analysis.md, docs/03-engineering-design.md, and the current\ncodebase.\n\nKeep the existing stack, default generated-code behavior, redirect behavior,\nanalytics behavior, and API response contract compatible for callers that do\nnot provide an alias. Identify the required request/schema, service, persistence,\nmigration, API documentation, and test changes. Surface decisions that need\nhuman input, including alias character rules, length limits, reserved values,\nand duplicate-alias behavior. Do not add link expiration or other features.\n\nReturn a structured draft with affected requirements and components, assumptions,\nopen questions, risks, ordered tasks with dependencies, tests, and acceptance\nchecks. Mark it pending human review; do not imply the feature has been approved\nor implemented.",
+  "summary": "Assess an optional custom-alias enhancement to the existing URL-shortener without silently approving it.",
+  "functional_requirements": [
+    "Keep generated codes working when a caller omits a custom alias.",
+    "If approved, accept an optional alias when creating a link and preserve existing redirects and analytics."
+  ],
+  "quality_requirements": [
+    "Preserve backward compatibility for existing API clients.",
+    "Enforce alias uniqueness safely under concurrent creation requests.",
+    "Document and test validation and duplicate-alias behavior."
+  ],
+  "assumptions": [
+    "Alias support is a proposed enhancement, not part of the currently accepted baseline.",
+    "No expiration behavior is included in this request."
+  ],
+  "open_questions": [
+    "What characters, length bounds, case sensitivity, and reserved aliases are allowed?",
+    "What response should a duplicate alias produce?",
+    "Is a database migration required, or can the existing unique code column support aliases?"
+  ],
+  "risks": [
+    "Unapproved alias rules could create incompatible API behavior.",
+    "A migration or uniqueness implementation could invalidate existing mappings if not tested against current data."
+  ],
+  "ordered_tasks": [
+    {
+      "id": "T-101",
+      "title": "Approve the alias contract and acceptance criteria",
+      "description": "Define requirements and acceptance criteria; separate confirmed scope from assumptions and open decisions.",
+      "dependencies": [],
+      "ai_assistance_point": "Use AI to trace statements to source requirements and identify gaps without silently deciding them.",
+      "human_validation": "Human review confirms scope, dependencies, and acceptance checks against the source documents."
+    },
+    {
+      "id": "T-112",
+      "title": "Define alias requirements and reserved values",
+      "description": "Define and approve alias rules before implementation.",
+      "dependencies": [
+        "T-101"
+      ],
+      "ai_assistance_point": "Use AI to identify product decisions and compatibility impacts.",
+      "human_validation": "Record human approval of syntax, bounds, reserved words, and duplicate behavior."
+    },
+    {
+      "id": "T-113",
+      "title": "Implement approved alias behavior",
+      "description": "Implement only the approved alias behavior and any required migration.",
+      "dependencies": [
+        "T-112",
+        "T-103"
+      ],
+      "ai_assistance_point": "Use AI to trace impacted schemas, routes, storage, and tests.",
+      "human_validation": "Verify compatibility, uniqueness, migration safety, and redirect behavior."
+    },
+    {
+      "id": "T-109",
+      "title": "Add compatibility, validation, and integration tests",
+      "description": "Add focused regression and cross-service integration tests.",
+      "dependencies": [
+        "T-113"
+      ],
+      "ai_assistance_point": "Use AI to derive test cases from requirements and failure modes.",
+      "human_validation": "Run the regular suite and configured integration suite; inspect failures."
+    },
+    {
+      "id": "T-111",
+      "title": "Document the approved behavior and migration",
+      "description": "Document implementation, setup, validation, decisions, risks, and limitations.",
+      "dependencies": [
+        "T-109"
+      ],
+      "ai_assistance_point": "Use AI to draft documentation from verified code and captured test output.",
+      "human_validation": "Follow clean setup instructions and verify claims against code and evidence."
+    }
+  ],
+  "tests": [
+    "Run focused creation and redirect tests plus the full python -m pytest -q suite.",
+    "Test omitted aliases, accepted aliases, malformed/reserved aliases, and duplicate aliases.",
+    "Apply and inspect any migration against both a clean schema and the current schema."
+  ],
+  "acceptance_checks": [
+    "Existing request bodies without aliases continue to create generated codes.",
+    "Only human-approved alias rules are accepted and persisted.",
+    "Existing links remain resolvable and concurrent duplicates follow the documented conflict contract."
+  ],
+  "generation": {
+    "method": "local scenario template",
+    "live_ai_model_used": false,
+    "notice": "This CLI structures a draft; it does not call an AI model or make approval decisions."
+  },
+  "human_review": {
+    "status": "pending",
+    "decision": null,
+    "reviewer": null,
+    "reviewed_at": null,
+    "notes": null
+  }
+}

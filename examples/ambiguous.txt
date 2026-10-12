@@ -1,0 +1,19 @@
+Make tracking secure and safe.
+
+Analyze this request against docs/01-business-requirement.md,
+docs/02-requirement-analysis.md, docs/03-engineering-design.md, and the current
+codebase. Do not guess what “secure and safe” means. Identify the key questions
+for a human to answer, including what tracking data is required, privacy and
+retention expectations, access controls, abuse threats, and acceptable event
+loss or delay.
+
+The current design uses Redis Streams and an asynchronous worker for click
+analytics, and does not require storing IP addresses or user-agent values.
+Treat those as current design facts, not permission to collect additional
+personal data. Do not propose replacing the analytics architecture unless
+answers to the open questions justify it.
+
+Return a structured draft containing an interpretation, assumptions, open
+questions, risks, candidate task breakdown with dependencies, tests, and
+acceptance checks. Separate confirmed requirements from options that need a
+decision. Mark it pending human review.

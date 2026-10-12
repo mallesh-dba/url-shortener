@@ -61,7 +61,7 @@ The prototype must not imply that AI autonomously owns or approves engineering d
 | Analytics scope | At minimum, analytics means recording and retrieving usage for a short link. Exact metrics and granularity are not specified. | Assumption; state the chosen scope in design. |
 | AI integration | AI tools must assist development tasks. The assignment does not explicitly require embedding a live AI provider in the runnable prototype. | Design decision; explain the selected demonstration approach. |
 | Technology stack | The assignment itself does not mandate a stack. The architecture input specifies Python 3.11+, FastAPI, async SQLAlchemy 2.0, PostgreSQL, and Redis for this design. | Treat as architecture constraints for this use case; record separately if they become approved project-wide requirements. |
-| Short-link behavior | The assignment does not specify custom aliases, expiration, deletion, or authentication. | Out of scope unless chosen and documented. |
+| Short-link behavior | The assignment baseline does not specify custom aliases, expiration, deletion, or authentication. | Custom aliases were separately accepted as a brownfield extension on 2026-10-12 and are documented in the engineering design; expiration, deletion, and authentication remain out of scope. |
 | Analytics privacy | Collection of IP addresses, user-agent strings, or other personal data is not required by the assignment. | Avoid unless justified; document any collection and retention. |
 | Approval | No actual business stakeholder is provided for the interview assignment. | Baseline approval is simulated by the candidate and must be described as such. |
 

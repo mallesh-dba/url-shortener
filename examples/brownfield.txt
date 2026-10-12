@@ -1,0 +1,16 @@
+Extend the existing URL-shortener service to support an optional custom alias
+when creating a link. Analyze the change against docs/01-business-requirement.md,
+docs/02-requirement-analysis.md, docs/03-engineering-design.md, and the current
+codebase.
+
+Keep the existing stack, default generated-code behavior, redirect behavior,
+analytics behavior, and API response contract compatible for callers that do
+not provide an alias. Identify the required request/schema, service, persistence,
+migration, API documentation, and test changes. Surface decisions that need
+human input, including alias character rules, length limits, reserved values,
+and duplicate-alias behavior. Do not add link expiration or other features.
+
+Return a structured draft with affected requirements and components, assumptions,
+open questions, risks, ordered tasks with dependencies, tests, and acceptance
+checks. Mark it pending human review; do not imply the feature has been approved
+or implemented.

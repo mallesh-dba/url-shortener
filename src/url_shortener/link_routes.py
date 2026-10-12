@@ -82,6 +82,7 @@ async def create_link(
         request.app.state.redis,
         str(payload.destination_url),
         settings,
+        payload.custom_alias,
     )
     return ShortLinkCreateResponse(
         code=link.code,

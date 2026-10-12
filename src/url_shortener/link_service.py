@@ -31,6 +31,10 @@ class LinkPersistenceUnavailable(Exception):
     pass
 
 
+class ShortCodeAlreadyExists(Exception):
+    pass
+
+
 class LinkLookupUnavailable(Exception):
     pass
 
@@ -93,10 +97,16 @@ async def create_short_link(
     redis_client: LinkCache,
     destination_url: str,
     settings: Settings,
+    custom_alias: str | None = None,
 ) -> ShortLink:
-    for attempt in range(MAX_CODE_GENERATION_ATTEMPTS):
+    attempts = 1 if custom_alias is not None else MAX_CODE_GENERATION_ATTEMPTS
+    for attempt in range(attempts):
         link = ShortLink(
-            code=generate_short_code(),
+            code=(
+                custom_alias
+                if custom_alias is not None
+                else generate_short_code()
+            ),
             destination_url=destination_url,
         )
         session.add(link)
@@ -106,6 +116,8 @@ async def create_short_link(
         except IntegrityError as error:
             await _rollback(session)
             if _is_code_collision(error):
+                if custom_alias is not None:
+                    raise ShortCodeAlreadyExists from error
                 CODE_COLLISION_RETRIES.inc()
                 if attempt + 1 < MAX_CODE_GENERATION_ATTEMPTS:
                     continue

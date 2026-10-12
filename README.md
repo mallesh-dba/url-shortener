@@ -2,6 +2,39 @@
 
 Build a scalable URL shortener service with APIs, persistence, and analytics.
 
+## Requirement-processing prototype
+
+The repository includes a local, deterministic requirement-processing CLI for
+the greenfield, brownfield, and ambiguous demonstration inputs. It creates
+structured JSON drafts and deliberately leaves them pending human review. It
+does not call an AI model; use an AI assistant separately for analysis, then
+review/refine the draft before recording a decision.
+
+After installing the project with `python -m pip install -e ".[dev]"`, run
+these commands from the project root:
+
+```powershell
+python -m requirement_processor analyze examples\greenfield.txt --output output\greenfield.json
+python -m requirement_processor analyze examples\brownfield.txt --output output\brownfield.json
+python -m requirement_processor analyze examples\ambiguous.txt --output output\ambiguous.json
+```
+
+Review and refine a generated JSON draft before recording a human decision.
+The review command writes a separate reviewed artifact and leaves the original
+draft unchanged:
+
+```powershell
+python -m requirement_processor review output\greenfield.json `
+  --decision accept --reviewer "Candidate" `
+  --notes "Reviewed and accepted for the greenfield scenario." `
+  --output output\greenfield-reviewed.json
+```
+
+Use `--decision reject` to record rejection. The CLI records the supplied
+decision but does not verify that the draft was edited or determine whether
+acceptance is appropriate. Run its focused checks with
+`python -m pytest -q tests/test_requirement_processor.py`.
+
 ## Development setup
 
 Requires Python 3.11 or newer. Install the project and development dependencies:
@@ -50,7 +83,7 @@ rules. Do not publish or proxy this listener through the public API gateway.
 Metric labels use route templates and do not include short codes, destination
 URLs, client IP addresses, or user agents.
 
-Create a short link with:
+Create a short link with an automatically generated code:
 
 ```powershell
 $response = Invoke-RestMethod -Method Post `
@@ -61,6 +94,25 @@ $response = Invoke-RestMethod -Method Post `
 
 The API returns the generated code, its public short URL, and creation time.
 Creation errors use `{"error":{"code":"...","message":"...","details":...}}`.
+
+To request a custom alias, include the optional `custom_alias` field:
+
+```powershell
+$response = Invoke-RestMethod -Method Post `
+  -Uri http://127.0.0.1:8000/api/v1/shorten `
+  -ContentType application/json `
+  -Body '{"destination_url":"https://example.com/sale","custom_alias":"summer-sale"}'
+```
+
+Aliases must contain 3–16 lowercase ASCII letters, digits, or hyphens, and
+must begin and end with a letter or digit. Uppercase, reserved route names
+(`api`, `health`, `metrics`, `docs`, `redoc`, `openapi.json`), and duplicate
+codes are rejected. A duplicate code returns `409` with error code
+`short_code_conflict`; invalid aliases return `422`. The alias and generated
+codes share the existing unique `short_links.code` namespace and database
+constraint. The current `VARCHAR(16)` column already supports these rules, so
+no schema migration is required. Omitting `custom_alias` preserves generated
+Base62 code behavior and the existing response shape.
 
 Follow a returned short URL to test redirect behavior:
 
@@ -165,10 +217,11 @@ finally {
 }
 ```
 
-The integration test creates a short link, checks PostgreSQL persistence,
-Redis cache and stream publication, redirect behavior, and analytics/error
-contracts. It uses a unique stream and removes its test link/cache/stream data
-afterward. The test requires the schema migration to be applied.
+The integration tests create short links, check PostgreSQL persistence, Redis
+cache and stream publication, redirect behavior, analytics/error contracts,
+and custom-alias uniqueness/redirect behavior. They use unique test data and
+remove their test link/cache/stream data afterward. The tests require the
+schema migration to be applied.
 
 ## Implementation and acceptance status
 
@@ -182,13 +235,14 @@ the [engineering design](docs/03-engineering-design.md).
 For a quick standalone reference to assumptions, risks, and PostgreSQL schema,
 see [Risks, Assumptions, and Database Design](docs/05-risk-assumptions-database-design.md).
 
-Latest regular-suite evidence: `python -m pytest -q` passed **77 tests** and
-skipped the one PostgreSQL/Redis integration test because its opt-in variable
-was not set. An earlier integration-enabled run passed **76 tests** against
-configured local PostgreSQL and Redis; the exact command and evidence are in
+Latest regular-suite evidence: `python -m pytest -q` passed **98 tests** and
+skipped **2 opt-in PostgreSQL/Redis integration tests** because the integration
+variable was not set. An earlier integration-enabled run passed **76 tests**
+against configured local PostgreSQL and Redis, before the custom-alias
+integration case was added. That new live database check still needs to be run
+with the integration environment configured. The command and evidence are in
 the [engineering breakdown](docs/04-engineering-breakdown.md) and
-[AI-assisted work log](docs/ai-usage-log.md). The run was not repeated as part
-of final documentation review.
+[AI-assisted work log](docs/ai-usage-log.md).
 
 T-110 benchmark code and local warm/cold measurements are recorded in the
 [benchmark reports](docs/t110-local-load-test.json),

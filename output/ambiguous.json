@@ -1,0 +1,122 @@
+{
+  "schema_version": "1.0",
+  "scenario": "ambiguous",
+  "classification_note": "Scenario is inferred by simple local keyword rules and must be confirmed by a human.",
+  "source_file": "examples\\ambiguous.txt",
+  "requirement": "Make tracking secure and safe.\n\nAnalyze this request against docs/01-business-requirement.md,\ndocs/02-requirement-analysis.md, docs/03-engineering-design.md, and the current\ncodebase. Do not guess what “secure and safe” means. Identify the key questions\nfor a human to answer, including what tracking data is required, privacy and\nretention expectations, access controls, abuse threats, and acceptable event\nloss or delay.\n\nThe current design uses Redis Streams and an asynchronous worker for click\nanalytics, and does not require storing IP addresses or user-agent values.\nTreat those as current design facts, not permission to collect additional\npersonal data. Do not propose replacing the analytics architecture unless\nanswers to the open questions justify it.\n\nReturn a structured draft containing an interpretation, assumptions, open\nquestions, risks, candidate task breakdown with dependencies, tests, and\nacceptance checks. Separate confirmed requirements from options that need a\ndecision. Mark it pending human review.",
+  "summary": "Clarify what “make tracking secure and safe” means before proposing implementation changes.",
+  "functional_requirements": [],
+  "quality_requirements": [
+    "Do not add tracking fields or security controls until their requirements and trade-offs are approved.",
+    "Keep the existing minimal click-event design and best-effort delivery limitation visible."
+  ],
+  "assumptions": [
+    "The current event contains an event ID, link identity, and UTC click time.",
+    "The baseline does not collect IP addresses or user-agent values.",
+    "The existing analytics pipeline uses Redis Streams and an asynchronous worker."
+  ],
+  "open_questions": [
+    "Which threat or failure does “secure and safe” refer to: privacy, data integrity, access, abuse, retention, or delivery reliability?",
+    "Which event fields are necessary, and who may access analytics?",
+    "What retention/deletion policy and acceptable event loss or delay are required?",
+    "Will the service be exposed publicly, and are authentication, rate limits, or abuse controls required?"
+  ],
+  "risks": [
+    "Guessing the requirement could add unnecessary personal-data collection or controls that do not address the actual threat.",
+    "The current best-effort publication path can lose a click if the API process fails before publishing."
+  ],
+  "ordered_tasks": [
+    {
+      "id": "T-101",
+      "title": "Clarify the security and tracking requirement",
+      "description": "Define requirements and acceptance criteria; separate confirmed scope from assumptions and open decisions.",
+      "dependencies": [],
+      "ai_assistance_point": "Use AI to trace statements to source requirements and identify gaps without silently deciding them.",
+      "human_validation": "Human review confirms scope, dependencies, and acceptance checks against the source documents."
+    },
+    {
+      "id": "T-106",
+      "title": "Review the current analytics pipeline and delivery guarantees",
+      "description": "Implement asynchronous click-event transport and idempotent worker processing.",
+      "dependencies": [
+        "T-101"
+      ],
+      "ai_assistance_point": "Use AI to draft event processing and failure-injection tests.",
+      "human_validation": "Verify duplicate delivery, commit-before-ack, pending recovery, and disclosed loss window."
+    },
+    {
+      "id": "T-107",
+      "title": "Review the analytics API and access surface",
+      "description": "Expose the documented aggregate analytics response.",
+      "dependencies": [
+        "T-101"
+      ],
+      "ai_assistance_point": "Use AI to draft a typed response and contract tests.",
+      "human_validation": "Verify response shape, unknown-link behavior, and eventual aggregate updates."
+    },
+    {
+      "id": "T-114",
+      "title": "Approve privacy, retention, access, and durability requirements",
+      "description": "Clarify and approve tracking privacy, access, retention, and durability requirements.",
+      "dependencies": [
+        "T-101",
+        "T-106",
+        "T-107"
+      ],
+      "ai_assistance_point": "Use AI to organize interpretations, risks, and focused questions.",
+      "human_validation": "Record explicit human decisions; leave unresolved controls unimplemented."
+    },
+    {
+      "id": "T-108",
+      "title": "Implement only approved security and reliability controls",
+      "description": "Apply approved security, reliability, and observability controls.",
+      "dependencies": [
+        "T-114"
+      ],
+      "ai_assistance_point": "Use AI to inspect relevant code paths and suggest targeted tests.",
+      "human_validation": "Inspect collected fields, error handling, privacy, and metric cardinality."
+    },
+    {
+      "id": "T-109",
+      "title": "Verify approved behavior with tests and failure injection",
+      "description": "Add focused regression and cross-service integration tests.",
+      "dependencies": [
+        "T-108"
+      ],
+      "ai_assistance_point": "Use AI to derive test cases from requirements and failure modes.",
+      "human_validation": "Run the regular suite and configured integration suite; inspect failures."
+    },
+    {
+      "id": "T-111",
+      "title": "Document decisions, evidence, and remaining limitations",
+      "description": "Document implementation, setup, validation, decisions, risks, and limitations.",
+      "dependencies": [
+        "T-109"
+      ],
+      "ai_assistance_point": "Use AI to draft documentation from verified code and captured test output.",
+      "human_validation": "Follow clean setup instructions and verify claims against code and evidence."
+    }
+  ],
+  "tests": [
+    "Inspect click_events schema, Redis Stream fields, API responses, logs, and metric labels for unapproved data.",
+    "Run analytics integration tests against PostgreSQL and Redis.",
+    "If durability changes are approved, inject failures and verify recovery and idempotency."
+  ],
+  "acceptance_checks": [
+    "Human decisions explicitly define required data, access, retention, and delivery expectations.",
+    "No unapproved personal data is added to storage, streams, logs, API responses, or metrics.",
+    "Only approved behavior is implemented and verified against the clarified requirement."
+  ],
+  "generation": {
+    "method": "local scenario template",
+    "live_ai_model_used": false,
+    "notice": "This CLI structures a draft; it does not call an AI model or make approval decisions."
+  },
+  "human_review": {
+    "status": "pending",
+    "decision": null,
+    "reviewer": null,
+    "reviewed_at": null,
+    "notes": null
+  }
+}
