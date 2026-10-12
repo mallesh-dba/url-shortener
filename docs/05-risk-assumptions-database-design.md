@@ -158,14 +158,17 @@ and data.
 ## Current Validation and Open Evidence
 
 - Current regular-suite result after the accepted tracking controls:
-  `python -m pytest -q` — **123 passed, 2 skipped** (both PostgreSQL/Redis
-  integration tests are opt-in).
-- Focused analytics/model/redirect suite: **39 passed, 2 skipped**. The
-  previous user-run integration result (**2 passed**) predates the T-115 schema
-  changes and does not validate revisions `20261012_01`/`20261012_02`.
-- Upgrade and downgrade SQL for the full Alembic chain rendered offline.
-  Applying the two new revisions to PostgreSQL and rerunning live integration
-  tests remains pending.
+  with `URL_SHORTENER_RUN_INTEGRATION=1`: `python -m pytest -q` — **128 passed,
+  no skips** after the worker invalid-event and reserved-route review fixes.
+  The integration test file alone passed **2 tests** against configured
+  PostgreSQL and Redis. Without the opt-in, the prior regular-suite result was
+  123 passed and 2 integration tests skipped.
+- Revisions `20261012_01` and `20261012_02` were applied to PostgreSQL and the
+  schema was inspected at `20261012_02`. Integration tests and a manual
+  create/redirect/analytics check confirm event publication, persistence, and
+  worker aggregation.
+- The user reports rotating the analytics key after it appeared in shared
+  terminal output; the key value is not recorded.
 - Dependency check: `python -m pip check` — no broken requirements.
 - Local warm/cold benchmark reports are stored in
   [`t110-local-load-test.json`](t110-local-load-test.json),

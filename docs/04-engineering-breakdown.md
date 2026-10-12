@@ -100,7 +100,7 @@ The prototype-level requirements REQ-1–REQ-3 and REQ-9–REQ-10, and cross-cut
 
 #### T-107: Implement Analytics API
 
-- **Status:** Baseline endpoint was validated on 2026-10-11. Current code now authenticates access and returns a trailing-12-calendar-month sum of daily aggregates; live validation of the revised schema remains pending.
+- **Status:** Baseline endpoint was validated on 2026-10-11. The revised authenticated endpoint and trailing-12-calendar-month aggregate were validated against the live PostgreSQL/Redis schema on 2026-10-12.
 - **Description & scope:** Implement `GET /api/v1/links/{code}/analytics`, returning `code` and `clicks_total` for the trailing 12 calendar months, requiring the configured shared Bearer key, or returning `404` for an unknown link.
 - **Dependencies:** T-103 and T-106.
 - **AI-assistance point:** Ask AI to draft a response schema, query, and contract tests and to distinguish eventually consistent aggregates from synchronous counts.
@@ -202,12 +202,12 @@ The prompts below are illustrative rather than historical verbatim prompts. Base
 
 Validation was run against the current code and documented contracts:
 
-- Current regular-suite result after T-115: `python -m pytest -q` — **123 passed, 2 skipped** (both PostgreSQL/Redis integration tests are opt-in). With `URL_SHORTENER_RUN_INTEGRATION=1`, the full suite passed **125 tests, no skips** against configured PostgreSQL and Redis.
+- Latest user-run suite after the worker invalid-event and reserved-route review fixes: with `URL_SHORTENER_RUN_INTEGRATION=1`, `python -m pytest -q tests\test_service_integration.py` passed **2 tests**, and `python -m pytest -q` passed **128 tests with no skips** against configured PostgreSQL and Redis. The regular suite without the opt-in was previously **123 passed, 2 skipped**.
 - The focused creation and redirect suite previously passed **42 tests** for the alias extension. The focused analytics/model/redirect suite after T-115 passed **39 tests**, with both service-backed integration cases skipped.
 - The user applied revisions `20261012_01` and `20261012_02`; PostgreSQL reported `20261012_02`, and inspection confirmed code-based click events, daily aggregates, and processed-event deduplication tables.
 - After correcting the integration-test fixture to wrap its test key in `SecretStr`, `URL_SHORTENER_RUN_INTEGRATION=1 python -m pytest -q tests\test_service_integration.py` passed **2 tests** against the current PostgreSQL/Redis schema. The user also manually confirmed a new link returned 302 and its authenticated analytics count reached 1 after polling, verifying worker-to-aggregate processing.
 - Manual brownfield checks confirmed alias creation and 302 redirect, 422 for malformed/reserved aliases, generated-code behavior when the alias is omitted, and 409 for a duplicate alias. An initial duplicate request returned 422 because its curl body was malformed JSON; the corrected `Invoke-RestMethod` request returned 409.
-- Q-6/Q-7 remain unaccepted: the recorded local load runs missed their throughput and latency targets. The analytics drain discrepancy and clean-environment T-111 sign-off remain open.
+- The user reports rotating the analytics key after exposure in shared terminal output; the value is not recorded. Q-6/Q-7 remain unaccepted: the recorded local load runs missed their throughput and latency targets. The analytics drain discrepancy and clean-environment T-111 sign-off remain open.
 
 #### T-116: Implement the Requirement-Processing Prototype
 

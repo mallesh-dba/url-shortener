@@ -11,10 +11,12 @@ the PostgreSQL/Redis integration tests passed **2 tests** and the full suite
 with `URL_SHORTENER_RUN_INTEGRATION=1` passed **125 tests with no skips**.
 The user also manually confirmed link creation, a 302 redirect, and an
 authenticated analytics count of 1 after polling, verifying the worker-to-
-aggregate path. This supersedes older entries below that say the T-115 live
-migration, integration, and worker checks are pending. The analytics key was
-exposed in shared terminal output and must be rotated; its value is not
-recorded here. See the current [validation evidence](../evidence/ambiguous/validation.md).
+aggregate path. After fixing the worker's permanent-invalid-event handling and
+reserved-route rate-limit classification, the user reran the integration test
+file (**2 passed**) and full opt-in suite (**128 passed, no skips**). The user
+reports rotating the analytics key after it appeared in shared terminal
+output; its value is not recorded here. See the current
+[validation evidence](../evidence/ambiguous/validation.md).
 
 | Task | Prompt summary and AI contribution | Engineer review, edge cases, and resulting changes | Validation and artifacts |
 |---|---|---|---|
@@ -36,7 +38,12 @@ recorded here. See the current [validation evidence](../evidence/ambiguous/valid
 | T-105: Implement Cached Redirects and Database Fallback (2026-10-10) | Prompt summary: implement T-105 cache-first redirects and PostgreSQL fallback; cover cache hits, misses, cold starts, unknown codes, and Redis outages, with attention to false 404s. | Added `GET /{code}` returning 302. Cache misses, cache errors, and invalid cache payloads consult PostgreSQL; a positive database result populates Redis best effort. Only a completed database query returning no row produces 404; database failures and connection errors return 503. Human validation exposed an uncaught `ConnectionRefusedError` that previously returned 500 when both cache and PostgreSQL were unavailable; expanded database error handling and added a regression test. Click event publication remains outside T-105 and is planned for T-106. | Tests cover cache hit without DB access, miss/cold start with cache fill, unknown code after DB confirmation, Redis outage with known link, Redis+DB outage yielding 503, invalid cache payload fallback, and database/connection failures. `pytest -q`: 36 passed; `compileall`, `pip check`, and `git diff --check` passed. Human checks verified 302 on cache hit with PostgreSQL stopped, 404 for an unknown code, and 302 database fallback with Redis stopped. After the fix and API restart, a fresh code with PostgreSQL stopped returned HTTP 503 and `{"error":{"code":"lookup_unavailable","message":"Link lookup is temporarily unavailable","details":null}}`; PostgreSQL was then restarted and `/health/ready` reported both dependencies true. T-105 human validation is complete. [Route](../src/url_shortener/link_routes.py); [lookup service](../src/url_shortener/link_service.py); [tests](../tests/test_redirects.py). |
 | T-106: Implement Redis Stream Analytics Pipeline | Implemented stream producer, independently runnable consumer, transactional idempotency, pending recovery, lag reporting, and conservative trimming. Added periodic trimming (default every 60 seconds) and caches the safe boundary only when it actually limits trimming; retention-limited runs re-evaluate the retention window. Consumer-group creation retries Redis startup failures using the configured retry delay. This entry describes the original pipeline; T-115 later changed event payloads to use public short-link codes and moved click totals to rolling daily aggregates. | Failure-injection tests cover duplicate delivery, insert/counter/commit failure before commit, replay after commit/ack failure, cursor-based pending recovery, startup retry, interval-based trimming, unchanged effective-boundary short-circuit, retention-window advancement, and trimming boundaries across all consumer groups. Redis client `XAUTOCLAIM`/`XTRIM` signatures were verified against installed redis-py 6.4.0; worker requires Redis 6.2+. Human validation is complete for the original pipeline. | `pytest -q`: 57 passed (20 analytics-focused cases plus redirect-event coverage); `compileall`, `pip check`, and `git diff --check` passed. Human checks: duplicate event UUID produced one stored event/count; PostgreSQL outage left one pending entry, and after restart the event persisted and XPENDING returned to zero. A fresh API-created link returned 302; PostgreSQL showed `clicks_total = 1` and one event, with XPENDING zero. With Redis stopped, the same link still returned 302 via PostgreSQL; Redis restarted and `/health/ready` reported both dependencies ready. These checks predate T-115 and do not validate its new migrations or schema. Pylance diagnostics were empty for changed Python files. See [producer/worker](../src/url_shortener/analytics.py), [worker entry point](../src/url_shortener/analytics_worker.py), and [tests](../tests/test_analytics.py). |
 
-## In-Progress Tasks
+## Historical In-Progress Snapshot
+
+The T-115 row below reflects its status when first recorded. Live migration,
+integration, manual worker validation, key rotation, and the latest test run
+are superseded by the retrospective validation update above and
+[current evidence](../evidence/ambiguous/validation.md).
 
 | Task | Prompt summary and AI contribution | Engineer review, edge cases, and resulting changes | Validation and artifacts |
 |---|---|---|---|
