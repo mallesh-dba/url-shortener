@@ -7,6 +7,7 @@ from uuid import UUID
 
 import pytest
 from redis.exceptions import RedisError, ResponseError
+from sqlalchemy.exc import SQLAlchemyError
 
 from url_shortener.analytics import (
     ClickAnalyticsWorker,
@@ -67,9 +68,12 @@ def click_fields(
 ) -> dict[str, str]:
     return {
         "event_id": str(event_id or UUID("11111111-1111-4111-8111-111111111111")),
-        "link_id": "42",
+        "code": "Ab12Cd34",
         "clicked_at": "2026-10-10T12:00:00+00:00",
     }
+
+
+_UNSET = object()
 
 
 class FakeResult:
@@ -77,11 +81,15 @@ class FakeResult:
         self,
         inserted_event_id: UUID | None = None,
         rowcount: int = 1,
+        scalar_value: object = _UNSET,
     ) -> None:
         self.inserted_event_id = inserted_event_id
         self.rowcount = rowcount
+        self.scalar_value = scalar_value
 
-    def scalar_one_or_none(self) -> UUID | None:
+    def scalar_one_or_none(self) -> object:
+        if self.scalar_value is not _UNSET:
+            return self.scalar_value
         return self.inserted_event_id
 
 
@@ -158,14 +166,14 @@ def make_worker(
 async def test_click_event_producer_emits_minimal_utc_event() -> None:
     redis_client = AsyncMock()
 
-    await publish_click_event(redis_client, 42, "clicks:test")
+    await publish_click_event(redis_client, "Ab12Cd34", "clicks:test")
 
     redis_client.xadd.assert_awaited_once()
     stream, fields = redis_client.xadd.await_args.args
     assert stream == "clicks:test"
-    assert set(fields) == {"event_id", "link_id", "clicked_at"}
+    assert set(fields) == {"event_id", "code", "clicked_at"}
     assert UUID(fields["event_id"])
-    assert fields["link_id"] == "42"
+    assert fields["code"] == "Ab12Cd34"
     assert datetime.fromisoformat(fields["clicked_at"]).utcoffset() == timedelta(0)
 
 
@@ -174,7 +182,7 @@ async def test_click_event_publish_failure_is_logged_as_best_effort() -> None:
     redis_client = AsyncMock()
     redis_client.xadd.side_effect = RedisError("redis unavailable")
 
-    await publish_click_event(redis_client, 42)
+    await publish_click_event(redis_client, "Ab12Cd34")
 
     redis_client.xadd.assert_awaited_once()
 
@@ -246,7 +254,12 @@ async def test_worker_retries_consumer_group_creation_after_redis_failure() -> N
 async def test_worker_commits_event_and_increment_before_acknowledging() -> None:
     event_id = UUID("11111111-1111-4111-8111-111111111111")
     session = FakeSession(
-        [FakeResult(inserted_event_id=event_id), FakeResult(rowcount=1)]
+        [
+            FakeResult(scalar_value=42),
+            FakeResult(inserted_event_id=event_id),
+            FakeResult(),
+            FakeResult(),
+        ]
     )
     redis_client = AsyncMock()
     worker = make_worker(redis_client, session)
@@ -268,22 +281,102 @@ async def test_worker_commits_event_and_increment_before_acknowledging() -> None
 
     await worker.persist_and_ack("1710000000000-0", click_fields(event_id))
 
-    assert len(session.executed_statements) == 2
+    assert len(session.executed_statements) == 4
+    assert session.committed
+    redis_client.xack.assert_awaited_once()
+
+
+@async_test
+async def test_worker_reclaims_legacy_pending_link_id_event() -> None:
+    event_id = UUID("11111111-1111-4111-8111-111111111111")
+    session = FakeSession(
+        [
+            FakeResult(scalar_value="Ab12Cd34"),
+            FakeResult(inserted_event_id=event_id),
+            FakeResult(),
+            FakeResult(),
+        ]
+    )
+    redis_client = AsyncMock()
+    worker = make_worker(redis_client, session)
+    legacy_fields = {
+        "event_id": str(event_id),
+        "link_id": "42",
+        "clicked_at": "2026-10-10T12:00:00+00:00",
+    }
+
+    await worker.persist_and_ack("1710000000000-0", legacy_fields)
+
+    assert len(session.executed_statements) == 4
     assert session.committed
     redis_client.xack.assert_awaited_once()
 
 
 @async_test
 async def test_duplicate_delivery_does_not_increment_click_counter_again() -> None:
-    session = FakeSession([FakeResult(inserted_event_id=None)])
+    session = FakeSession(
+        [
+            FakeResult(scalar_value=42),
+            FakeResult(scalar_value=None),
+        ]
+    )
     redis_client = AsyncMock()
     worker = make_worker(redis_client, session)
 
     await worker.persist_and_ack("1710000000000-0", click_fields())
 
-    assert len(session.executed_statements) == 1
+    assert len(session.executed_statements) == 2
     assert session.committed
     redis_client.xack.assert_awaited_once()
+
+
+@async_test
+async def test_unknown_short_code_is_not_marked_or_acknowledged() -> None:
+    session = FakeSession([FakeResult(scalar_value=None)])
+    redis_client = AsyncMock()
+    worker = make_worker(redis_client, session)
+
+    with pytest.raises(ValueError, match="unknown short-link code"):
+        await worker.persist_and_ack("1710000000000-0", click_fields())
+
+    assert len(session.executed_statements) == 1
+    assert session.rolled_back
+    redis_client.xack.assert_not_awaited()
+
+
+@async_test
+async def test_worker_acknowledges_and_logs_permanently_invalid_event(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    session = FakeSession([FakeResult(scalar_value=None)])
+    redis_client = AsyncMock()
+    worker = make_worker(redis_client, session)
+
+    assert await worker._process_messages(
+        [("1710000000000-0", click_fields())]
+    ) == 0
+
+    assert session.rolled_back
+    redis_client.xack.assert_awaited_once_with(
+        "clicks:v1",
+        "click-analytics:v1",
+        "1710000000000-0",
+    )
+    assert "Discarding permanently invalid click event" in caplog.text
+
+
+@async_test
+async def test_worker_keeps_transient_database_failure_pending() -> None:
+    session = FakeSession([SQLAlchemyError("database unavailable")])
+    redis_client = AsyncMock()
+    worker = make_worker(redis_client, session)
+
+    assert await worker._process_messages(
+        [("1710000000000-0", click_fields())]
+    ) == 0
+
+    assert session.rolled_back
+    redis_client.xack.assert_not_awaited()
 
 
 @async_test
@@ -301,18 +394,23 @@ async def test_database_failure_rolls_back_and_leaves_event_unacknowledged() -> 
 
 
 @async_test
-async def test_counter_update_failure_rolls_back_event_insert_and_does_not_ack() -> None:
+async def test_aggregate_update_failure_rolls_back_event_insert_and_does_not_ack() -> None:
     event_id = UUID("11111111-1111-4111-8111-111111111111")
     session = FakeSession(
-        [FakeResult(inserted_event_id=event_id), RuntimeError("counter failed")]
+        [
+            FakeResult(scalar_value=42),
+            FakeResult(inserted_event_id=event_id),
+            FakeResult(),
+            RuntimeError("aggregate failed"),
+        ]
     )
     redis_client = AsyncMock()
     worker = make_worker(redis_client, session)
 
-    with pytest.raises(RuntimeError, match="counter failed"):
+    with pytest.raises(RuntimeError, match="aggregate failed"):
         await worker.persist_and_ack("1710000000000-0", click_fields(event_id))
 
-    assert len(session.executed_statements) == 2
+    assert len(session.executed_statements) == 4
     assert session.rolled_back
     assert not session.committed
     redis_client.xack.assert_not_awaited()
@@ -322,7 +420,12 @@ async def test_counter_update_failure_rolls_back_event_insert_and_does_not_ack()
 async def test_commit_failure_leaves_stream_entry_unacknowledged() -> None:
     event_id = UUID("11111111-1111-4111-8111-111111111111")
     session = FakeSession(
-        [FakeResult(inserted_event_id=event_id), FakeResult(rowcount=1)]
+        [
+            FakeResult(scalar_value=42),
+            FakeResult(inserted_event_id=event_id),
+            FakeResult(),
+            FakeResult(),
+        ]
     )
     session.commit_error = RuntimeError("commit failed")
     redis_client = AsyncMock()
@@ -341,8 +444,11 @@ async def test_commit_then_ack_failure_can_be_replayed_idempotently() -> None:
     event_id = UUID("11111111-1111-4111-8111-111111111111")
     session = FakeSession(
         [
+            FakeResult(scalar_value=42),
             FakeResult(inserted_event_id=event_id),
-            FakeResult(rowcount=1),
+            FakeResult(),
+            FakeResult(),
+            FakeResult(scalar_value=42),
             FakeResult(inserted_event_id=None),
         ]
     )
@@ -358,14 +464,19 @@ async def test_commit_then_ack_failure_can_be_replayed_idempotently() -> None:
     assert session.committed
     assert await worker._process_messages([message]) == 1
 
-    assert len(session.executed_statements) == 3
+    assert len(session.executed_statements) == 6
     assert redis_client.xack.await_count == 2
 
 
 @async_test
 async def test_worker_recovers_pending_entries_before_reading_new_messages() -> None:
     session = FakeSession(
-        [FakeResult(inserted_event_id=UUID(click_fields()["event_id"])), FakeResult()]
+        [
+            FakeResult(scalar_value=42),
+            FakeResult(inserted_event_id=UUID(click_fields()["event_id"])),
+            FakeResult(),
+            FakeResult(),
+        ]
     )
     redis_client = AsyncMock()
     redis_client.xautoclaim.return_value = (
@@ -412,7 +523,12 @@ async def test_worker_advances_pending_recovery_cursor_between_batches() -> None
 @async_test
 async def test_worker_reads_new_messages_from_its_consumer_group() -> None:
     session = FakeSession(
-        [FakeResult(inserted_event_id=UUID(click_fields()["event_id"])), FakeResult()]
+        [
+            FakeResult(scalar_value=42),
+            FakeResult(inserted_event_id=UUID(click_fields()["event_id"])),
+            FakeResult(),
+            FakeResult(),
+        ]
     )
     redis_client = AsyncMock()
     redis_client.xreadgroup.return_value = [

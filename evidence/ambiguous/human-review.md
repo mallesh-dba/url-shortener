@@ -1,17 +1,24 @@
 # Ambiguous Scenario Human Review
 
-- **Decision:** Pending; no human decision answering the open security/tracking
-  questions has been recorded.
-- **Current status:** The analysis is for clarification only. No implementation
-  scope is approved by the phrase “Make tracking secure and safe.”
-- **Part 1 task mapping:** If taken forward, the initial clarification maps to
-  T-101; review of current analytics behavior maps to T-106/T-107; requirements
-  clarification maps to T-114; approved controls would be implemented under
-  T-108 and/or T-115, verified under T-109, and documented under T-111. No
-  additional task is approved until the answers establish a concrete scope.
-- **Do not infer approval for:** IP/user-agent collection, new retention rules,
-  authentication, rate limiting, a transactional outbox, or replacement of
-  Redis Streams.
-- **Next human action:** Answer the clarifying questions in
-  `ai-analysis.md`, record the decision in the requirements/design, then accept
-  or reject specific implementation tasks.
+- **Decision:** Requirements accepted by the user on 2026-10-12, as recorded in
+  [the reviewed scenario artifact](../../output/ambiguous-reviewed.json).
+- **Accepted scope:** “Tracking” means click analytics. Store only event ID,
+  short-link code, and UTC click timestamp; collect no IP address, user-agent,
+  or other personal data. Delete raw click events after 90 days and retain
+  aggregate counts for 12 months. Require authenticated, authorized analytics
+  access. Use a shared Bearer API key and Redis-backed per-client-IP limits of
+  10 creations, 120 redirects, and 60 analytics requests per minute. Honor
+  forwarded client addresses only when the immediate peer is in an explicitly
+  configured trusted-proxy CIDR. Redirects remain independent of analytics;
+  publication is best effort, may be delayed, and may lose a click if the API
+  process fails before publishing.
+- **Acceptance boundary:** This decision accepts requirements only. It is not
+  implementation or validation acceptance and does not approve public
+  deployment. The shared token has no per-user or per-link authorization.
+- **Task mapping:** Initial clarification and code/design review map to T-101,
+  T-106, and T-107; explicit requirements acceptance completes T-114;
+  implementation is T-115 (with schema changes under T-103); automated and
+  live verification are T-109; documentation/evidence is T-111.
+- **Remaining production decisions:** Destination-abuse reporting/blocking,
+  link ownership and administrative access, secret rotation/operations,
+  backup/restore, and deployment/network review.

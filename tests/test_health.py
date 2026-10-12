@@ -103,6 +103,7 @@ def test_readiness_reports_dependency_status(monkeypatch: pytest.MonkeyPatch) ->
         database_url="postgresql+asyncpg://user:password@localhost/shortener",
         redis_url="redis://localhost:6379/0",
         public_base_url="https://sho.rt",
+        analytics_api_key="test-only-analytics-token-for-unit-tests-012345",
     )
     monkeypatch.setattr(health, "postgres_is_ready", AsyncMock(return_value=True))
     monkeypatch.setattr(health, "redis_is_ready", AsyncMock(return_value=True))
@@ -117,12 +118,20 @@ def test_readiness_reports_dependency_status(monkeypatch: pytest.MonkeyPatch) ->
     assert ready_response.status_code == 200
     assert ready_response.json() == {
         "status": "ready",
-        "dependencies": {"postgres": True, "redis": True},
+        "dependencies": {
+            "postgres": True,
+            "redis": True,
+            "analytics_authentication": True,
+        },
     }
     assert unavailable_response.status_code == 503
     assert unavailable_response.json() == {
         "status": "not_ready",
-        "dependencies": {"postgres": True, "redis": False},
+        "dependencies": {
+            "postgres": True,
+            "redis": False,
+            "analytics_authentication": True,
+        },
     }
 
 

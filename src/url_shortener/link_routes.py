@@ -13,6 +13,9 @@ from url_shortener.link_service import (
     make_short_url,
 )
 from url_shortener.models import ShortLink
+from url_shortener.security import (
+    require_analytics_authentication,
+)
 from url_shortener.schemas import (
     LinkAnalyticsResponse,
     ShortLinkCreateRequest,
@@ -28,16 +31,25 @@ router = APIRouter(tags=["links"])
 )
 async def get_link_analytics_endpoint(
     code: str,
+    request: Request,
     session: AsyncSession = Depends(get_session),
 ) -> LinkAnalyticsResponse:
-    analytics_code, clicks_total = await get_link_analytics(session, code)
+    require_analytics_authentication(request)
+    analytics_code, clicks_total = await get_link_analytics(
+        session,
+        code,
+        request.app.state.settings.analytics_aggregate_retention_months,
+    )
     return LinkAnalyticsResponse(
         code=analytics_code,
         clicks_total=clicks_total,
     )
 
 
-@router.get("/{code}", response_class=RedirectResponse)
+@router.get(
+    "/{code}",
+    response_class=RedirectResponse,
+)
 async def redirect_to_destination(
     code: str,
     request: Request,
@@ -57,7 +69,7 @@ async def redirect_to_destination(
     background_tasks.add_task(
         publish_click_event,
         request.app.state.redis,
-        link_id,
+        code,
         request.app.state.settings.analytics_stream_name,
     )
     return RedirectResponse(

@@ -83,4 +83,35 @@ requirements.
 - Do not mark this request accepted for implementation until the relevant
   questions are answered by a human and captured in the requirements/design.
 
-This is a draft analysis; it does not resolve the ambiguity.
+The preceding section records the initial clarification analysis. The later
+human decision and implementation work are recorded below; requirements
+acceptance is separate from implementation and validation acceptance.
+
+## Subsequent human decision and implementation work
+
+The user later accepted a concrete requirements scope, recorded in
+[human-review.md](human-review.md) and
+[`output/ambiguous-reviewed.json`](../../output/ambiguous-reviewed.json).
+That acceptance did not itself certify implementation.
+
+**Implementation prompt summary (retrospective, not verbatim):** Implement only
+the accepted privacy, retention, analytics-access, rate-limit, and trusted-proxy
+requirements. Preserve the existing Redis Streams worker and best-effort
+redirect behavior; add the schema changes, focused tests, and truthful
+documentation/evidence. Do not claim deployment approval or durable tracking.
+
+**AI-assisted output:** Reviewed the analytics models, worker, API, middleware,
+settings, migration chain, tests, docs, and scenario evidence. Implemented
+daily retained aggregates and event-ID deduplication, changed new raw events
+and Redis Stream payloads to event ID/code/UTC timestamp, retained compatibility
+with already-pending legacy `link_id` stream entries, added the shared analytics
+Bearer key and Redis fixed-window limits, and added trusted-proxy client-address
+resolution. Added migrations and updated focused coverage/documentation.
+
+**Human review/refinement:** Kept redirect publication asynchronous and
+best-effort as accepted; did not add IP/user-agent event fields or replace
+Redis Streams. Preserved pre-existing aggregate totals by seeding one baseline
+bucket at migration-time UTC date because the old lifetime counter has no
+per-click dates; this transitional baseline is disclosed and remains visible
+for up to 12 months after migration. Live migration and service integration
+remain pending; see [validation.md](validation.md).

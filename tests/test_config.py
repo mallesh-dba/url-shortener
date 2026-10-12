@@ -33,6 +33,11 @@ def test_settings_validate_dependency_urls() -> None:
         ("public_base_url", "https://user:pass@sho.rt"),
         ("db_pool_size", 0),
         ("redis_max_connections", 0),
+        ("analytics_raw_retention_days", 0),
+        ("analytics_aggregate_retention_months", 0),
+        ("rate_limit_create_requests_per_minute", 0),
+        ("trusted_proxy_cidrs", ["not-a-network"]),
+        ("analytics_api_key", "too-short"),
     ],
 )
 def test_settings_reject_invalid_values(setting: str, value: object) -> None:

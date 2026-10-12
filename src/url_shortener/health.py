@@ -50,6 +50,9 @@ async def readiness(request: Request, response: Response) -> dict[str, object]:
             request.app.state.settings.db_readiness_timeout_seconds,
         ),
         "redis": await redis_is_ready(request.app.state.redis),
+        "analytics_authentication": (
+            request.app.state.settings.analytics_api_key is not None
+        ),
     }
     ready = all(dependencies.values())
     if not ready:

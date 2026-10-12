@@ -5,13 +5,19 @@ from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import SecretStr
 from redis.asyncio import Redis
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from url_shortener.config import Settings, get_settings
 from url_shortener.main import create_app
-from url_shortener.models import ClickEvent, ShortLink
+from url_shortener.models import (
+    ClickEvent,
+    DailyClickAggregate,
+    ProcessedClickEvent,
+    ShortLink,
+)
 
 pytestmark = pytest.mark.skipif(
     os.getenv("URL_SHORTENER_RUN_INTEGRATION") != "1",
@@ -25,6 +31,9 @@ def integration_settings() -> Settings:
         update={
             "analytics_stream_name": f"clicks:t109:{uuid4().hex}",
             "api_metrics_port": 0,
+            "analytics_api_key": SecretStr(
+                "test-only-integration-analytics-token-0123456789"
+            ),
         }
     )
 
@@ -56,7 +65,7 @@ async def assert_persisted_and_published(
         )
         assert len(stream_entries) == 1
         _, fields = stream_entries[0]
-        assert set(fields) == {"event_id", "link_id", "clicked_at"}
+        assert set(fields) == {"event_id", "code", "clicked_at"}
 
         async with engine.connect() as connection:
             result = await connection.execute(
@@ -64,7 +73,6 @@ async def assert_persisted_and_published(
                     ShortLink.id,
                     ShortLink.code,
                     ShortLink.destination_url,
-                    ShortLink.clicks_total,
                 ).where(ShortLink.code == code)
             )
             stored_link = result.one()
@@ -72,8 +80,7 @@ async def assert_persisted_and_published(
         assert stored_link.destination_url == (
             "https://example.com/t109-integration"
         )
-        assert stored_link.clicks_total == 0
-        assert fields["link_id"] == str(stored_link.id)
+        assert fields["code"] == stored_link.code
     finally:
         await redis_client.aclose()
         await engine.dispose()
@@ -102,8 +109,21 @@ async def remove_integration_data(
             )
             link_id = link_id_result.scalar_one_or_none()
             if link_id is not None:
+                event_ids = select(ClickEvent.event_id).where(
+                    ClickEvent.code == code
+                )
                 await connection.execute(
-                    delete(ClickEvent).where(ClickEvent.link_id == link_id)
+                    delete(ProcessedClickEvent).where(
+                        ProcessedClickEvent.event_id.in_(event_ids)
+                    )
+                )
+                await connection.execute(
+                    delete(ClickEvent).where(ClickEvent.code == code)
+                )
+                await connection.execute(
+                    delete(DailyClickAggregate).where(
+                        DailyClickAggregate.link_id == link_id
+                    )
                 )
                 await connection.execute(
                     delete(ShortLink).where(ShortLink.id == link_id)
@@ -129,7 +149,12 @@ def test_create_redirect_analytics_contract_with_postgres_and_redis() -> None:
             created_code = created["code"]
 
             analytics_before_redirect = client.get(
-                f"/api/v1/links/{created_code}/analytics"
+                f"/api/v1/links/{created_code}/analytics",
+                headers={
+                    "Authorization": (
+                        "Bearer test-only-integration-analytics-token-0123456789"
+                    )
+                },
             )
             assert analytics_before_redirect.status_code == 200
             assert analytics_before_redirect.json() == {
@@ -147,7 +172,12 @@ def test_create_redirect_analytics_contract_with_postgres_and_redis() -> None:
             )
 
             missing_analytics = client.get(
-                "/api/v1/links/T109Missing/analytics"
+                "/api/v1/links/T109Missing/analytics",
+                headers={
+                    "Authorization": (
+                        "Bearer test-only-integration-analytics-token-0123456789"
+                    )
+                },
             )
             assert missing_analytics.status_code == 404
             assert missing_analytics.json()["error"]["code"] == "link_not_found"

@@ -24,6 +24,7 @@ def make_settings() -> Settings:
         database_url="postgresql+asyncpg://localhost/url_shortener",
         redis_url="redis://localhost:6379/0",
         public_base_url="https://sho.rt",
+        analytics_api_key="test-only-analytics-token-for-unit-tests-012345",
     )
 
 
@@ -63,6 +64,7 @@ def post_create_link(
         yield session
 
     app.dependency_overrides[get_session] = override_session
+    redis_client.eval.return_value = [1, 60]
     with TestClient(app) as client:
         client.app.state.redis = redis_client
         response = client.post(
@@ -143,6 +145,24 @@ def test_create_link_commits_before_best_effort_cache_and_returns_contract() -> 
         "destination_url": "https://example.com/path",
     }
     assert redis_client.set.await_args.kwargs == {"ex": 3600}
+
+
+def test_rate_limit_applies_before_malformed_request_body_validation() -> None:
+    app = create_app(make_settings())
+    redis_client = AsyncMock()
+    redis_client.eval.return_value = [1, 60]
+    with (
+        patch("url_shortener.main.Redis.from_url", return_value=redis_client),
+        TestClient(app) as client,
+    ):
+        response = client.post(
+            "/api/v1/shorten",
+            content="{",
+            headers={"Content-Type": "application/json"},
+        )
+
+    assert response.status_code == 422
+    redis_client.eval.assert_awaited_once()
 
 
 def test_create_link_uses_requested_custom_alias() -> None:

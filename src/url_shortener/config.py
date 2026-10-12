@@ -34,6 +34,14 @@ class Settings(BaseSettings):
     analytics_stream_trim_interval_seconds: Annotated[int, Field(gt=0)] = 60
     analytics_lag_log_interval_seconds: Annotated[int, Field(gt=0)] = 60
     analytics_retry_delay_seconds: Annotated[float, Field(gt=0)] = 1
+    analytics_raw_retention_days: Annotated[int, Field(gt=0)] = 90
+    analytics_aggregate_retention_months: Annotated[int, Field(gt=0)] = 12
+    analytics_retention_interval_seconds: Annotated[int, Field(gt=0)] = 3600
+    analytics_api_key: SecretStr | None = None
+    rate_limit_create_requests_per_minute: Annotated[int, Field(gt=0)] = 10
+    rate_limit_redirect_requests_per_minute: Annotated[int, Field(gt=0)] = 120
+    rate_limit_analytics_requests_per_minute: Annotated[int, Field(gt=0)] = 60
+    trusted_proxy_cidrs: list[str] = Field(default_factory=list)
     api_metrics_host: Annotated[str, Field(min_length=1)] = "127.0.0.1"
     api_metrics_port: Annotated[int, Field(ge=1, le=65535)] = 9100
     analytics_metrics_host: Annotated[str, Field(min_length=1)] = "127.0.0.1"
@@ -72,6 +80,26 @@ class Settings(BaseSettings):
                 "public_base_url must be an HTTP(S) origin without credentials, "
                 "path, query, or fragment"
             )
+        return value
+
+    @field_validator("trusted_proxy_cidrs")
+    @classmethod
+    def validate_trusted_proxy_cidrs(cls, values: list[str]) -> list[str]:
+        from ipaddress import ip_network
+
+        try:
+            return [str(ip_network(value, strict=False)) for value in values]
+        except ValueError as error:
+            raise ValueError("trusted_proxy_cidrs must contain valid IP networks") from error
+
+    @field_validator("analytics_api_key")
+    @classmethod
+    def validate_analytics_api_key(
+        cls,
+        value: SecretStr | None,
+    ) -> SecretStr | None:
+        if value is not None and len(value.get_secret_value()) < 32:
+            raise ValueError("analytics_api_key must be at least 32 characters")
         return value
 
 

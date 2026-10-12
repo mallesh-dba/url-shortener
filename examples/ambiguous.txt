@@ -13,6 +13,8 @@ Treat those as current design facts, not permission to collect additional
 personal data. Do not propose replacing the analytics architecture unless
 answers to the open questions justify it.
 
+Accept with the following clarified scope: “Tracking” means click analytics only. Store only the event ID, short-link code, and UTC click timestamp; do not collect IP addresses, user-agent values, or other personal data. Retain raw click events for 90 days, then delete them; retain aggregate counts for 12 months. Analytics must be accessible only to authenticated, authorized users. Treat the service as not approved for public deployment until analytics access controls and abuse protections, including rate limits, are implemented. Redirects remain independent of analytics processing. Accept the current best-effort event delivery behavior for this assignment: analytics may be delayed, and a click may be lost if the API process fails before publishing it; do not claim durable tracking. Record these as requirements, not completed features. Accepting this scope does not mean implementation or validation is complete.
+
 Return a structured draft containing an interpretation, assumptions, open
 questions, risks, candidate task breakdown with dependencies, tests, and
 acceptance checks. Separate confirmed requirements from options that need a
