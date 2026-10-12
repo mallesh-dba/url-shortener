@@ -142,7 +142,7 @@ or test database because it removes the schema and its data.
 
 ## Current Validation and Open Evidence
 
-- Current regular-suite result: `python -m pytest -q` — **98 passed, 2 skipped**
+- Current regular-suite result: `python -m pytest -q` — **102 passed, 2 skipped**
   (both PostgreSQL/Redis integration tests are opt-in).
 - Integration-enabled result: `tests\test_service_integration.py` — **2 passed**
   against configured PostgreSQL and Redis, including the custom-alias flow.
