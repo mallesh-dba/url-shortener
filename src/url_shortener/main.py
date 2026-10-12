@@ -139,6 +139,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             request.method == "GET"
             and request.url.path.count("/") == 1
             and request.url.path != "/"
+            and request.url.path
+            not in {
+                "/api",
+                "/docs",
+                "/health",
+                "/metrics",
+                "/openapi.json",
+                "/redoc",
+            }
         ):
             category = "redirect"
 

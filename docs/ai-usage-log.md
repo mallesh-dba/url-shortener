@@ -4,6 +4,18 @@ Use this log to track meaningful AI-assisted tasks, engineer review, edge cases,
 
 ## Completed Tasks
 
+**T-115 validation update (2026-10-12):** The user applied both tracking
+migrations and inspected the schema at PostgreSQL revision `20261012_02`.
+Following a correction to the integration-test fixture's `SecretStr` test key,
+the PostgreSQL/Redis integration tests passed **2 tests** and the full suite
+with `URL_SHORTENER_RUN_INTEGRATION=1` passed **125 tests with no skips**.
+The user also manually confirmed link creation, a 302 redirect, and an
+authenticated analytics count of 1 after polling, verifying the worker-to-
+aggregate path. This supersedes older entries below that say the T-115 live
+migration, integration, and worker checks are pending. The analytics key was
+exposed in shared terminal output and must be rotated; its value is not
+recorded here. See the current [validation evidence](../evidence/ambiguous/validation.md).
+
 | Task | Prompt summary and AI contribution | Engineer review, edge cases, and resulting changes | Validation and artifacts |
 |---|---|---|---|
 | T-112/T-113: Accept and Implement Brownfield Custom Aliases (2026-10-12) | Prompt summary: complete the accepted brownfield scenario using the user-confirmed alias contract: 3–16 lowercase letters/digits/hyphens with alphanumeric ends, reserved route names, and HTTP 409 for duplicates. | Added optional `custom_alias` validation and persistence while retaining generated-code behavior when omitted. Reused `short_links.code VARCHAR(16)` and `uq_short_links_code`; no schema migration was needed. Duplicate uniqueness violations for requested aliases map to a conflict, while generated collisions retain bounded retries. Updated API/design/README and accepted-scenario evidence. Expiration remains out of scope. | Focused creation/redirect suite: 42 passed. Current regular `python -m pytest -q`: 102 passed, 2 opt-in integration tests skipped. Separately, the user ran `tests\\test_service_integration.py` with `URL_SHORTENER_RUN_INTEGRATION=1` against PostgreSQL/Redis: 2 passed, including alias persistence, duplicate conflict, and redirect. Manual validation confirmed alias creation and 302 redirect, 422 for invalid/reserved aliases, generated-code compatibility, and 409 for a duplicate; an initial curl attempt returned 422 due to malformed JSON and the corrected `Invoke-RestMethod` request returned 409. See [accepted scenario](../output/brownfield-reviewed-accepted.json), [implementation](../src/url_shortener/schemas.py), [service](../src/url_shortener/link_service.py), [tests](../tests/test_link_creation.py), [design](03-engineering-design.md), and [README](../README.md). |

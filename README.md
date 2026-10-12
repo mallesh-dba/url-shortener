@@ -197,8 +197,9 @@ Each successful redirect schedules best-effort publication of a minimal click
 event (`event_id`, short-link `code`, and UTC `clicked_at`) to the configured
 Redis Stream. The worker stores eligible raw events and updates the daily
 aggregate idempotently in the same PostgreSQL transaction, then acknowledges
-the stream entry. If processing or acknowledgement fails, the entry remains
-pending and can be reclaimed after
+the stream entry. Malformed events and events referencing an unknown link are
+logged and acknowledged so they do not remain pending indefinitely. Transient
+database or Redis failures remain pending and can be reclaimed after
 `URL_SHORTENER_ANALYTICS_PENDING_IDLE_MS`. The worker logs consumer-group
 pending count and lag periodically.
 

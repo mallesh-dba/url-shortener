@@ -5,6 +5,7 @@ from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import SecretStr
 from redis.asyncio import Redis
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -30,7 +31,7 @@ def integration_settings() -> Settings:
         update={
             "analytics_stream_name": f"clicks:t109:{uuid4().hex}",
             "api_metrics_port": 0,
-            "analytics_api_key": (
+            "analytics_api_key": SecretStr(
                 "test-only-integration-analytics-token-0123456789"
             ),
         }

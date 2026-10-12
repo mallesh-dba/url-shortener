@@ -7,6 +7,7 @@ from uuid import UUID
 
 import pytest
 from redis.exceptions import RedisError, ResponseError
+from sqlalchemy.exc import SQLAlchemyError
 
 from url_shortener.analytics import (
     ClickAnalyticsWorker,
@@ -339,6 +340,41 @@ async def test_unknown_short_code_is_not_marked_or_acknowledged() -> None:
         await worker.persist_and_ack("1710000000000-0", click_fields())
 
     assert len(session.executed_statements) == 1
+    assert session.rolled_back
+    redis_client.xack.assert_not_awaited()
+
+
+@async_test
+async def test_worker_acknowledges_and_logs_permanently_invalid_event(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    session = FakeSession([FakeResult(scalar_value=None)])
+    redis_client = AsyncMock()
+    worker = make_worker(redis_client, session)
+
+    assert await worker._process_messages(
+        [("1710000000000-0", click_fields())]
+    ) == 0
+
+    assert session.rolled_back
+    redis_client.xack.assert_awaited_once_with(
+        "clicks:v1",
+        "click-analytics:v1",
+        "1710000000000-0",
+    )
+    assert "Discarding permanently invalid click event" in caplog.text
+
+
+@async_test
+async def test_worker_keeps_transient_database_failure_pending() -> None:
+    session = FakeSession([SQLAlchemyError("database unavailable")])
+    redis_client = AsyncMock()
+    worker = make_worker(redis_client, session)
+
+    assert await worker._process_messages(
+        [("1710000000000-0", click_fields())]
+    ) == 0
+
     assert session.rolled_back
     redis_client.xack.assert_not_awaited()
 

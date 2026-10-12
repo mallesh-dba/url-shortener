@@ -195,19 +195,19 @@ The prompts below are illustrative rather than historical verbatim prompts. Base
 
 - **Expected AI design output:** The initial ambiguity analysis lists open decisions; after acceptance, the implementation maps event fields and retention to PostgreSQL/Redis changes, analytics authentication and request limits to API middleware/dependencies, and each control to tests.
 - **Human architectural refinement:** User accepted requirements only: the raw event contains event ID, short-link code, and UTC timestamp; no IP/user-agent/other personal data; raw retention 90 days; aggregate retention 12 months; authenticated analytics; shared Bearer key; Redis-backed per-client limits (10/120/60 per minute); forwarded client IP trusted only behind configured proxies; redirects remain best effort and independent of analytics. The shared key provides no per-user/per-link authorization. Service is not approved for public deployment until controls and remaining deployment gates are reviewed.
-- **Output validation:** Run focused and regular `pytest` suites, render both new Alembic revisions offline, inspect the schema and Redis event shape in a live PostgreSQL/Redis integration run, and verify 401/429/503 responses, proxy-chain handling, retention cutoffs, and redelivery idempotency. The live migration/integration run is not yet recorded.
+- **Output validation:** Focused and regular `pytest` suites pass; both new Alembic revisions have rendered offline and have been applied to PostgreSQL, where the current schema was inspected at revision `20261012_02`. PostgreSQL/Redis integration tests now pass against that schema. Continue manual verification of worker-updated aggregate counts, 401/429/503 responses, proxy-chain handling, retention cutoffs, and redelivery idempotency.
 - **Validation criteria:** Automated tests pass; raw rows and stream fields contain exactly the approved fields; retention deletes raw rows after 90 days and aggregates/dedupe markers after 12 months; unauthorized analytics and over-limit requests are rejected; redirects remain best effort. Do not claim live DB validation or public readiness until those checks are performed.
 
 ## Validation Status
 
 Validation was run against the current code and documented contracts:
 
-- Current regular-suite result after T-115: `python -m pytest -q` — **123 passed, 2 skipped** (both PostgreSQL/Redis integration tests are opt-in).
+- Current regular-suite result after T-115: `python -m pytest -q` — **123 passed, 2 skipped** (both PostgreSQL/Redis integration tests are opt-in). With `URL_SHORTENER_RUN_INTEGRATION=1`, the full suite passed **125 tests, no skips** against configured PostgreSQL and Redis.
 - The focused creation and redirect suite previously passed **42 tests** for the alias extension. The focused analytics/model/redirect suite after T-115 passed **39 tests**, with both service-backed integration cases skipped.
-- The user's earlier `URL_SHORTENER_RUN_INTEGRATION=1` run against configured PostgreSQL and Redis passed **2 tests** for the then-current schema and alias behavior. It predates T-115 and does not validate the new migrations or schema.
-- Alembic upgrade and downgrade SQL for the complete migration chain both rendered offline. Revisions `20261012_01` and `20261012_02` have not been applied to a live PostgreSQL database.
+- The user applied revisions `20261012_01` and `20261012_02`; PostgreSQL reported `20261012_02`, and inspection confirmed code-based click events, daily aggregates, and processed-event deduplication tables.
+- After correcting the integration-test fixture to wrap its test key in `SecretStr`, `URL_SHORTENER_RUN_INTEGRATION=1 python -m pytest -q tests\test_service_integration.py` passed **2 tests** against the current PostgreSQL/Redis schema. The user also manually confirmed a new link returned 302 and its authenticated analytics count reached 1 after polling, verifying worker-to-aggregate processing.
 - Manual brownfield checks confirmed alias creation and 302 redirect, 422 for malformed/reserved aliases, generated-code behavior when the alias is omitted, and 409 for a duplicate alias. An initial duplicate request returned 422 because its curl body was malformed JSON; the corrected `Invoke-RestMethod` request returned 409.
-- Q-6/Q-7 remain unaccepted: the recorded local load runs missed their throughput and latency targets. The analytics drain discrepancy, live T-115 migration/integration validation, and clean-environment T-111 sign-off remain open.
+- Q-6/Q-7 remain unaccepted: the recorded local load runs missed their throughput and latency targets. The analytics drain discrepancy and clean-environment T-111 sign-off remain open.
 
 #### T-116: Implement the Requirement-Processing Prototype
 

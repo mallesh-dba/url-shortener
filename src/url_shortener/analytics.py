@@ -38,6 +38,12 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_STREAM_NAME = "clicks:v1"
 DEFAULT_CONSUMER_GROUP = "click-analytics:v1"
+
+
+class InvalidClickEventError(ValueError):
+    """A click event is malformed or refers to a link that does not exist."""
+
+
 class ClickStreamClient(Protocol):
     async def xadd(
         self,
@@ -140,24 +146,27 @@ def _field(fields: Mapping[str | bytes, str | bytes], key: str) -> str:
 def _parse_click_event(
     fields: Mapping[str | bytes, str | bytes],
 ) -> tuple[UUID, str | int, datetime]:
-    event_id = UUID(_field(fields, "event_id"))
     try:
-        code: str | int = _field(fields, "code")
-        if not 1 <= len(code) <= 16:
-            raise ValueError("Click event code must contain 1 to 16 characters")
-    except ValueError as error:
-        if "code" in fields or b"code" in fields:
-            raise
+        event_id = UUID(_field(fields, "event_id"))
         try:
-            code = int(_field(fields, "link_id"))
-        except ValueError:
-            raise error
-        if code < 1:
-            raise ValueError("Legacy click event link_id must be positive")
-    clicked_at = datetime.fromisoformat(_field(fields, "clicked_at"))
-    if clicked_at.tzinfo is None or clicked_at.utcoffset() is None:
-        raise ValueError("Click event clicked_at must include a timezone")
-    return event_id, code, clicked_at.astimezone(UTC)
+            code: str | int = _field(fields, "code")
+            if not 1 <= len(code) <= 16:
+                raise ValueError("Click event code must contain 1 to 16 characters")
+        except ValueError as error:
+            if "code" in fields or b"code" in fields:
+                raise
+            try:
+                code = int(_field(fields, "link_id"))
+            except ValueError:
+                raise error
+            if code < 1:
+                raise ValueError("Legacy click event link_id must be positive")
+        clicked_at = datetime.fromisoformat(_field(fields, "clicked_at"))
+        if clicked_at.tzinfo is None or clicked_at.utcoffset() is None:
+            raise ValueError("Click event clicked_at must include a timezone")
+        return event_id, code, clicked_at.astimezone(UTC)
+    except (TypeError, ValueError) as error:
+        raise InvalidClickEventError("Click event payload is invalid") from error
 
 
 async def ensure_consumer_group(
@@ -326,11 +335,11 @@ class ClickAnalyticsWorker:
                     )
                     link_id = link_result.scalar_one_or_none()
                 if link_id is None:
-                    raise ValueError(
+                    raise InvalidClickEventError(
                         "Click event references an unknown short-link code"
                     )
                 if code is None:
-                    raise ValueError(
+                    raise InvalidClickEventError(
                         "Legacy click event references an unknown link ID"
                     )
                 inserted = await session.execute(
@@ -385,13 +394,38 @@ class ClickAnalyticsWorker:
                 await self.persist_and_ack(stream_id, fields)
                 ANALYTICS_PROCESSED_EVENTS.inc()
                 processed += 1
+            except InvalidClickEventError as error:
+                ANALYTICS_PROCESSING_FAILURES.inc()
+                logger.error(
+                    "Discarding permanently invalid click event",
+                    extra={
+                        "operation": "process",
+                        "outcome": "discarded",
+                        "reason": str(error),
+                        "stream_entry_id": stream_id,
+                    },
+                )
+                try:
+                    await self.redis_client.xack(
+                        self.stream_name,
+                        self.group_name,
+                        stream_id,
+                    )
+                except (RedisError, OSError, TimeoutError):
+                    logger.exception(
+                        "Failed to acknowledge invalid click event; "
+                        "stream entry remains pending",
+                        extra={
+                            "operation": "ack_invalid_event",
+                            "outcome": "error",
+                            "stream_entry_id": stream_id,
+                        },
+                    )
             except (
                 SQLAlchemyError,
                 RedisError,
                 OSError,
                 TimeoutError,
-                ValueError,
-                TypeError,
             ):
                 ANALYTICS_PROCESSING_FAILURES.inc()
                 logger.exception(

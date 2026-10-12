@@ -62,6 +62,33 @@ def test_public_app_does_not_expose_metrics_and_labels_stay_bounded() -> None:
     assert "token=secret" not in metrics
 
 
+def test_reserved_single_segment_routes_are_not_rate_limited_as_redirects() -> None:
+    app = create_app(make_settings())
+    redis_client = AsyncMock()
+    redis_client.eval.return_value = [1, 60]
+
+    with (
+        patch("url_shortener.main.Redis.from_url", return_value=redis_client),
+        TestClient(app) as client,
+    ):
+        for path in (
+            "/api",
+            "/docs",
+            "/health",
+            "/metrics",
+            "/openapi.json",
+            "/redoc",
+        ):
+            client.get(path)
+
+        redis_client.eval.assert_not_awaited()
+
+        client.get("/unmatched-short-code")
+
+    redis_client.eval.assert_awaited_once()
+    assert redis_client.eval.await_args.args[2].startswith("rate:v1:redirect:")
+
+
 def test_unrecognized_method_uses_bounded_metric_label_and_original_log_value() -> None:
     app = create_app(make_settings())
     http_logger = logging.getLogger("url_shortener.http")
