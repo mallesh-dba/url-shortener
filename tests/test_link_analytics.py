@@ -95,6 +95,24 @@ def test_analytics_returns_404_only_when_database_confirms_unknown_code() -> Non
     session.execute.assert_awaited_once()
 
 
+def test_analytics_rollback_failure_preserves_503_response() -> None:
+    session = make_session(None)
+    session.execute.side_effect = OperationalError(
+        "SELECT",
+        {},
+        RuntimeError("database unavailable"),
+    )
+    session.rollback.side_effect = RuntimeError("rollback failed")
+
+    with patch("url_shortener.link_service.logger.exception") as log_rollback:
+        response = request_analytics(session, "Unknown1")
+
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "lookup_unavailable"
+    session.rollback.assert_awaited_once()
+    log_rollback.assert_called_once_with("Short-link analytics rollback failed")
+
+
 def test_analytics_database_failure_returns_503_not_404() -> None:
     session = make_session(None)
     session.execute.side_effect = OperationalError(
