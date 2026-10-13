@@ -73,7 +73,10 @@ async def get_link_analytics(
         )
         link_analytics = result.one_or_none()
     except (SQLAlchemyError, OSError, TimeoutError) as error:
-        await _rollback(session)
+        try:
+            await _rollback(session)
+        except Exception:
+            logger.exception("Short-link analytics rollback failed")
         logger.error("Short-link analytics lookup failed")
         raise LinkLookupUnavailable from error
 
