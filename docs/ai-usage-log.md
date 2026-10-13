@@ -14,8 +14,10 @@ authenticated analytics count of 1 after polling, verifying the worker-to-
 aggregate path. After fixing the worker's permanent-invalid-event handling and
 reserved-route rate-limit classification, the user reran the integration test
 file (**2 passed**) and full opt-in suite (**128 passed, no skips**). The user
-reports rotating the analytics key after it appeared in shared terminal
-output; its value is not recorded here. See the current
+reported rotating the analytics key after an earlier shared-terminal
+exposure. After a later IDE exposure, no subsequent rotation is confirmed, so
+security remediation remains open until that rotation is confirmed. Its value
+is not recorded here. See the current
 [validation evidence](../evidence/ambiguous/validation.md).
 For current task-by-task human verification across T-101–T-111, use the
 [baseline record in greenfield validation](../evidence/greenfield/validation.md#baseline-human-validation-t-101-through-t-111);
@@ -44,9 +46,9 @@ older task entries below preserve their original run-time results.
 ## Historical In-Progress Snapshot
 
 The T-115 row below reflects its status when first recorded. Live migration,
-integration, manual worker validation, key rotation, and the latest test run
-are superseded by the retrospective validation update above and
-[current evidence](../evidence/ambiguous/validation.md).
+integration, manual worker validation, the reported rotation after the earlier
+terminal exposure, and the latest test run are superseded by the retrospective
+validation update above and [current evidence](../evidence/ambiguous/validation.md).
 
 | Task | Prompt summary and AI contribution | Engineer review, edge cases, and resulting changes | Validation and artifacts |
 |---|---|---|---|

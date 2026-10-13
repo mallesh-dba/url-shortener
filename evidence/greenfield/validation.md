@@ -45,10 +45,12 @@ deployment verification.
 | T-111 — Document and sign off | Follow setup in a clean environment; rerun suites; inspect schema; verify API/worker metrics and smoke behavior; review benchmark limits. | **Assignment-level sign-off complete in a newly created Python 3.12 virtual environment.** The user reinstalled the project, confirmed PostgreSQL/Redis availability and migration head `20261012_02`, inspected the current schema, ran the integration and full suites (**2 passed**, **128 passed with no skips**), verified readiness and both private metrics listeners, confirmed the public `/metrics` path returns `404`, and completed create → redirect → authenticated analytics (`clicks_total: 1`) with one stored event and zero pending events. | The transcript used the existing checkout and database; it does not establish a fresh-checkout or empty-database migration run. Deployment/network review and backup/restore planning remain production follow-ups. Q-6/Q-7 are separately deferred and not claimed as accepted. No production-readiness or external approval is claimed. |
 
 Latest reported verification: **2 integration tests passed** and the full
-integration-enabled suite passed **128 tests with no skips**. The analytics
-key was rotated by the user after exposure; its value is intentionally not
-recorded. See [ambiguous-scenario validation](../ambiguous/validation.md) and
-[risk/assumption status](../../docs/05-risk-assumptions-database-design.md).
+integration-enabled suite passed **128 tests with no skips**. The user reported
+rotating the analytics key after an earlier shared-terminal exposure; after a
+later IDE exposure, no subsequent rotation is confirmed. Security remediation
+remains open until that rotation is confirmed. The key value is intentionally
+not recorded. See [ambiguous-scenario validation](../ambiguous/validation.md)
+and [risk/assumption status](../../docs/05-risk-assumptions-database-design.md).
 
 ### T-102 Execution Evidence
 

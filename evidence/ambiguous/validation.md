@@ -27,9 +27,11 @@
 - Manual API/worker flow confirmed readiness after configuring the analytics
   key; a new link was created, its short URL returned HTTP 302, and the
   authenticated analytics response reached `clicks_total: 1` after polling.
-  This confirms the worker-to-aggregate path end to end. The user reports
-  rotating the analytics key after it was exposed in shared terminal output;
-  the key value is not recorded here.
+  This confirms the worker-to-aggregate path end to end. The user reported
+  rotating the analytics key after an earlier shared-terminal exposure. After
+  a later IDE exposure, no subsequent rotation is confirmed, so security
+  remediation remains open until that rotation is confirmed. The key value is
+  not recorded here.
 - Automated tests cover event field shape, legacy pending-stream compatibility,
   event idempotency, retention cutoff behavior, authentication, request limits,
   proxy trust, and readiness. They do not establish deployment security,
