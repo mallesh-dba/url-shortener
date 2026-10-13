@@ -153,7 +153,7 @@ and data.
 | Click-event storage and Redis Stream growth need lifecycle policy. | Raw event rows, aggregate buckets, and dedupe markers have configured retention; safe stream trimming can intentionally stop before pending entries and exceed the configured maximum. | Hourly database cleanup applies 90-day raw and 12-month aggregate/dedupe retention; periodic safe stream trimming preserves pending/unprocessed entries. | **Operational follow-up:** Verify cleanup/Redis persistence and define backup deletion behavior before production or high-volume operation. |
 | Destination URLs can contain sensitive query values and can lead users to malicious sites. | Full destination URLs are stored to perform redirects. HTTP(S)-only validation does not assess destination reputation or user safety. | Request/service logging uses allowlisted fields and avoids logging complete destination URLs; creation does not fetch destinations. | **Residual risk:** Define abuse reporting, warnings/blocklists, and handling of sensitive URLs if required. |
 | Connection pools can exhaust shared service limits as processes scale. | DB and Redis pools are process-scoped; increasing API or worker process count multiplies total connections. | Pool sizes, overflow, timeouts, and Redis connection limits are configurable; pool utilization is instrumented. | **Before scaling:** Budget aggregate connections against PostgreSQL/Redis limits and tune using representative telemetry. |
-| Prototype documentation and tests do not establish production readiness. | No clean-environment sign-off, external stakeholder approval, deployment strategy, or backup/restore evidence is recorded. | Setup, API behavior, tests, failure semantics, metrics controls, and known limitations are documented. | **Open:** Complete clean setup/sign-off and production design review before deployment. |
+| Prototype documentation and tests do not establish production readiness. | Assignment-level setup/sign-off was completed in a newly created Python environment. A separate clean-environment sign-off using a fresh checkout and empty-database migration has not been completed; external stakeholder approval, production deployment strategy, and backup/restore evidence are also not recorded. | Setup, API behavior, tests, failure semantics, metrics controls, and known limitations are documented. | **Open before production:** Complete fresh-checkout/empty-database validation and production design/deployment and backup/restore reviews; do not conflate these with the completed assignment-level sign-off. |
 
 ## Current Validation and Open Evidence
 
@@ -167,8 +167,10 @@ and data.
   schema was inspected at `20261012_02`. Integration tests and a manual
   create/redirect/analytics check confirm event publication, persistence, and
   worker aggregation.
-- The user reports rotating the analytics key after it appeared in shared
-  terminal output; the key value is not recorded.
+- The user reported rotating the analytics key after an earlier shared-terminal
+  exposure. After a later IDE exposure, no subsequent rotation is confirmed;
+  security remediation remains open until that rotation is confirmed. The key
+  value is not recorded.
 - Dependency check: `python -m pip check` — no broken requirements.
 - Local warm/cold benchmark reports are stored in
   [`t110-local-load-test.json`](t110-local-load-test.json),
@@ -181,8 +183,11 @@ and data.
   assignment delivery with this limitation disclosed; it does not replace a
   production-like capacity run with comparable topology/resources and a
   separate load generator.
-- T-111 documentation is assembled. Clean-environment human sign-off remains
-  pending; no external approval or production readiness is claimed.
+- T-111 assignment-level setup/sign-off is complete in a newly created Python
+  environment. The validation used the existing checkout/database, so the
+  separate clean-environment sign-off for a fresh checkout and empty-database
+  migration remains outstanding. External approval and production readiness
+  are not claimed.
 
 See the [README](../README.md) for setup, API use, tests, and benchmark commands,
 the [engineering breakdown](04-engineering-breakdown.md) for task history and

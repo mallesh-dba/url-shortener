@@ -42,13 +42,15 @@ deployment verification.
 | T-108 — Security, reliability, observability | Inspect data/log fields, exercise DB/Redis failures, verify metric cardinality, review T-115 controls and public-exposure risks. | **Complete for assignment validation.** The user’s 2026-10-11 PowerShell transcript inspected Redis event fields and API logs/metrics for code and destination markers; exercised PostgreSQL-unavailable readiness, lookup, and creation behavior; confirmed a known redirect still returned `302` during Redis outage; and inspected bounded route-template, operation/outcome, pool, and worker metrics. T-115’s accepted analytics-authentication and rate-limit controls are separately implemented and covered by the current integration/manual evidence and tests. | Deployment/network scrape isolation remains to be checked in the target deployment. The transcript’s historical request to `/metrics` on port 8000 returned metrics at that time; current code now rejects that public route and automated tests verify the `404`, but this does not replace a deployment/network review. Abuse reporting/destination controls, ownership, and administrative flows remain open before public exposure. |
 | T-109 — Automated and integration tests | Run full regular and service-backed suites against PostgreSQL/Redis; record commands and results. | **Verified for the current tested configuration.** The user ran these commands from PowerShell with PostgreSQL and Redis configured: `$python = 'D:\assignment\.venv\Scripts\python.exe'`; `$env:URL_SHORTENER_RUN_INTEGRATION = "1"`; `& $python -m pytest -q tests/test_service_integration.py` (**2 passed**); `& $python -m pytest -q` (**128 passed, no skips**); `Remove-Item Env:URL_SHORTENER_RUN_INTEGRATION`. The test path uses forward slashes and is valid in PowerShell. | Re-run when material code or environment changes; set the opt-in environment variable before both commands and remove it afterward. |
 | T-110 — Capacity and latency | Run diagnostic warm/cold benchmarks, inspect reports/cleanup, then require representative results for Q-6/Q-7 acceptance. | **Local diagnostic validation complete; sufficient for assignment delivery with limitations disclosed.** The latest local warm/cold runs achieved about 34.5 redirects/s and 9.9 creations/s, with an achieved ratio of about 3.5:1. Client-observed P95 was 5.8–7.8 seconds for redirects and 5.7–7.4 seconds for creations. All recorded responses were successful, and benchmark fixture cleanup was confirmed. The results missed the 1,000 redirects/s, 100:1 ratio, 50 ms redirect P95, and 200 ms creation P95 targets. | Formal Q-6/Q-7 acceptance remains deferred, not an assignment hand-in blocker. Re-run on a production-like topology/resource configuration with a separate load generator; first reconcile the persisted-versus-acknowledged analytics discrepancy. |
-| T-111 — Document and sign off | Follow setup in a clean environment; rerun suites; inspect schema; verify API/worker metrics and smoke behavior; review benchmark limits. | **Documentation and evidence updated; final sign-off partial.** The user applied and inspected migrations, ran integration/full tests, and completed the create/redirect/analytics smoke flow. Benchmark results and limitations are recorded. | A full clean-environment setup/sign-off, deployment/network review, and backup/restore plan remain open. Formal Q-6/Q-7 acceptance is deferred and is not claimed for this prototype hand-in. No production-readiness or external approval is claimed. |
+| T-111 — Document and sign off | Follow setup in a clean environment; rerun suites; inspect schema; verify API/worker metrics and smoke behavior; review benchmark limits. | **Assignment-level sign-off complete in a newly created Python 3.12 virtual environment.** The user reinstalled the project, confirmed PostgreSQL/Redis availability and migration head `20261012_02`, inspected the current schema, ran the integration and full suites (**2 passed**, **128 passed with no skips**), verified readiness and both private metrics listeners, confirmed the public `/metrics` path returns `404`, and completed create → redirect → authenticated analytics (`clicks_total: 1`) with one stored event and zero pending events. | The transcript used the existing checkout and database; it does not establish a fresh-checkout or empty-database migration run. Deployment/network review and backup/restore planning remain production follow-ups. Q-6/Q-7 are separately deferred and not claimed as accepted. No production-readiness or external approval is claimed. |
 
 Latest reported verification: **2 integration tests passed** and the full
-integration-enabled suite passed **128 tests with no skips**. The analytics
-key was rotated by the user after exposure; its value is intentionally not
-recorded. See [ambiguous-scenario validation](../ambiguous/validation.md) and
-[risk/assumption status](../../docs/05-risk-assumptions-database-design.md).
+integration-enabled suite passed **128 tests with no skips**. The user reported
+rotating the analytics key after an earlier shared-terminal exposure; after a
+later IDE exposure, no subsequent rotation is confirmed. Security remediation
+remains open until that rotation is confirmed. The key value is intentionally
+not recorded. See [ambiguous-scenario validation](../ambiguous/validation.md)
+and [risk/assumption status](../../docs/05-risk-assumptions-database-design.md).
 
 ### T-102 Execution Evidence
 
@@ -73,6 +75,37 @@ The reported test coverage also exercises explicit invalid-configuration and
 secret-redaction behavior, along with request-session and application
 shutdown cleanup. This records the user's validation report; the test command
 output was not independently recaptured while documenting this evidence.
+
+### T-111 Clean-Environment Sign-Off Evidence
+
+The user-provided PowerShell transcript records an assignment-level setup and
+sign-off on 2026-10-13 using a newly created Python 3.12 virtual environment
+in the existing repository checkout:
+
+- Installed the editable project and development dependencies successfully.
+  Recreated `.env` from `.env.example` and configured local settings without
+  recording secret values.
+- Confirmed PostgreSQL accepted connections and Redis returned `PONG`.
+  `alembic upgrade head` completed, `alembic current` reported
+  `20261012_02 (head)`, and the user inspected `short_links`, `click_events`,
+  `daily_click_aggregates`, and `processed_click_event_ids`. The current
+  code-based click-event foreign key and indexes were present.
+- With `URL_SHORTENER_RUN_INTEGRATION=1`, the integration test file passed
+  **2 tests** and the full test suite passed **128 tests with no skips**.
+- Readiness returned `ready` with PostgreSQL, Redis, and analytics
+  authentication ready. The API and worker metrics listeners returned
+  Prometheus output; the public API `/metrics` route returned `404`.
+- A newly created link returned HTTP `302` with the expected `Location`.
+  Authenticated analytics reached `clicks_total: 1`; PostgreSQL showed one
+  aggregate click and one stored event, while Redis `XPENDING` returned zero.
+
+This is clean application-environment validation, not a clean checkout or
+empty-database test: the transcript shows an existing repository and database,
+and `alembic upgrade head` did not show migration operations. It therefore
+confirms the current install, database revision/schema, tests, operational
+metrics, and smoke flow, but does not claim migrations were applied from base
+to head on a newly provisioned database. Capacity acceptance and production
+readiness remain separate and are not claimed.
 
 ### T-106 Execution Evidence
 
