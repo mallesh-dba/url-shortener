@@ -38,8 +38,9 @@ acceptance is appropriate. Run its focused checks with
 Captured AI-assisted prompts and analyses, human review outcomes, and
 validation evidence are kept separately in [evidence/](evidence/README.md).
 These files distinguish assistant-generated analysis from deterministic CLI
-templates; the ambiguous scenario's requirements are accepted, while live
-database/integration validation remains pending.
+templates; the ambiguous scenario's requirements are accepted, and its
+PostgreSQL/Redis integration and worker-to-aggregate smoke validations are
+complete. Production deployment and capacity acceptance remain follow-up work.
 
 ## Development setup
 
@@ -268,28 +269,39 @@ The baseline URL-shortener implementation is present. `src/url_shortener`
 contains the FastAPI app and health checks, link creation/redirect/analytics
 routes, async persistence and Redis cache access, the Redis Stream analytics
 worker, and metrics/logging. Alembic revision `20261010_01` creates
-`short_links` and `click_events`; it can be applied with `alembic upgrade head`.
+the initial `short_links` and `click_events` schema; later revisions update it
+for the accepted analytics controls. Apply the complete migration chain with
+`alembic upgrade head`. The latest user validation inspected revision
+`20261012_02` and the current schema.
 The documented API contracts and operational details are in this README and
 the [engineering design](docs/03-engineering-design.md).
 For a quick standalone reference to assumptions, risks, and PostgreSQL schema,
 see [Risks, Assumptions, and Database Design](docs/05-risk-assumptions-database-design.md).
 
-Latest regular-suite evidence: `python -m pytest -q` passed **98 tests** and
-skipped **2 opt-in PostgreSQL/Redis integration tests** because the integration
-variable was not set. An earlier integration-enabled run passed **76 tests**
-against configured local PostgreSQL and Redis, before the custom-alias
-integration case was added. That new live database check still needs to be run
-with the integration environment configured. The command and evidence are in
-the [engineering breakdown](docs/04-engineering-breakdown.md) and
-[AI-assisted work log](docs/ai-usage-log.md).
+Latest user-reported validation (2026-10-13): with
+`URL_SHORTENER_RUN_INTEGRATION=1`, the PostgreSQL/Redis integration test file
+passed **2 tests**, and the full suite passed **128 tests with no skips**.
+The integration tests include persistence, Redis cache/stream behavior,
+redirects, analytics contracts/authentication, and custom-alias behavior.
+Assignment-level sign-off also completed in a newly created Python 3.12
+environment: readiness and private metrics listeners were checked; the public
+`/metrics` route returned `404`; and a create → redirect → authenticated
+analytics smoke test recorded one aggregate click, one stored event, and zero
+pending events. The setup reused the existing checkout and database, so it
+does not establish fresh-checkout or empty-database migration validation.
+See the [task validation evidence](evidence/greenfield/validation.md) and
+[engineering breakdown](docs/04-engineering-breakdown.md).
 
 T-110 benchmark code and local warm/cold measurements are recorded in the
 [benchmark reports](docs/t110-local-load-test.json),
 [additional warm report](docs/t110-warm-results.json), and
 [additional cold report](docs/t110-cold-results.json). These local runs missed
-Q-6/Q-7. The latest pair reported incomplete analytics draining; its benchmark
-fixtures were subsequently removed with the cleanup-only command. The
-persisted-versus-acknowledged event-count discrepancy still needs investigation.
+Q-6/Q-7. The latest pair achieved about 34.5 redirects/s and 9.9 creations/s
+(about 3.5:1), with client-observed P95 latency of about 5.8–7.8 seconds for
+redirects and 5.7–7.4 seconds for creations. The latest pair reported
+incomplete analytics draining; its benchmark fixtures were subsequently
+removed with the cleanup-only command. The persisted-versus-acknowledged
+event-count discrepancy still needs investigation.
 The local benchmark task is complete for assignment delivery as a diagnostic
 measurement; it does not demonstrate or claim that Q-6/Q-7 are met. Formal
 capacity acceptance remains deferred until the discrepancy is reconciled and
@@ -309,8 +321,12 @@ and loss-resistant click delivery still require separate decisions. Click
 publication is best effort after the redirect response; recent analytics may
 lag, and a process failure before publication can lose a click. The current
 simulated baseline approval is documented in the [business requirement](docs/01-business-requirement.md);
-there is no external stakeholder approval. Human sign-off from a clean setup
-has not been performed.
+there is no external stakeholder approval. Assignment-level sign-off has been
+completed in a newly created Python environment, but a fresh checkout and
+empty-database migration run have not been validated. The analytics key was
+reportedly rotated after an earlier terminal exposure; a subsequent rotation
+after a later IDE exposure is not confirmed, so that security remediation
+remains open. Do not include the key in documentation or shared output.
 
 ## Capacity and latency benchmark
 
