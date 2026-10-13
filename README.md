@@ -290,9 +290,14 @@ T-110 benchmark code and local warm/cold measurements are recorded in the
 Q-6/Q-7. The latest pair reported incomplete analytics draining; its benchmark
 fixtures were subsequently removed with the cleanup-only command. The
 persisted-versus-acknowledged event-count discrepancy still needs investigation.
-No capacity claim is made. Formal Q-6/Q-7 acceptance is deferred until
-representative deployment resources and a separate load generator are
-available.
+The local benchmark task is complete for assignment delivery as a diagnostic
+measurement; it does not demonstrate or claim that Q-6/Q-7 are met. Formal
+capacity acceptance remains deferred until the discrepancy is reconciled and
+the warm/cold workloads are repeated on a production-like environment with
+comparable service topology, resource sizing, configuration, and cache/data
+characteristics, using a separate load generator. That run must demonstrate the
+target throughput and 100:1 ratio, plus client-observed redirect P95 at or
+below 50 ms and creation P95 at or below 200 ms.
 
 This remains an assignment prototype, not a production-ready public service.
 Analytics bearer authentication, endpoint rate limits, and click/aggregate

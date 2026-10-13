@@ -18,9 +18,9 @@ not a separate approval or production-readiness sign-off.
 - Click analytics are asynchronous and best effort. The most recent local
   benchmark reports show an unresolved persisted-versus-acknowledged count
   discrepancy; see [current evidence](#current-validation-and-open-evidence).
-- Local load tests are diagnostic. Q-6/Q-7 remain unaccepted; their formal
-  acceptance requires a representative deployment and a separate load
-  generator.
+- Local load tests complete the assignment's diagnostic validation but do not
+  meet or accept Q-6/Q-7. Formal capacity acceptance requires a production-like
+  environment with comparable topology/resources and a separate load generator.
 
 ## Assumptions and Decisions
 
@@ -144,7 +144,7 @@ and data.
 
 | Risk | Evidence / impact | Current mitigation | Status / follow-up |
 |---|---|---|---|
-| Capacity targets are not met by local measurements. | Recorded local runs miss Q-6/Q-7 by a wide margin; local co-location prevents a representative capacity conclusion. | Reproducible warm/cold benchmark reports client-observed latency, actual throughput, cache, dependency, pool, and worker metrics. | **Open:** Do not claim target capacity. Formal validation awaits representative resources and a separate load generator. |
+| Capacity targets are not met by local measurements. | Latest local runs achieved about 34.5 redirects/s and 9.9 creations/s, about a 3.5:1 ratio, and client-observed P95 of 5.8–7.8 seconds for redirects and 5.7–7.4 seconds for creations; these miss the 1,000 redirects/s, 100:1, 50 ms, and 200 ms targets. Local service co-location is not representative. | Reproducible warm/cold benchmark reports client-observed latency, actual throughput, cache, dependency, pool, and worker metrics. Local diagnostics complete the assignment evidence package, with limits disclosed. | **Open for capacity acceptance, not assignment hand-in:** Do not claim Q-6/Q-7. Reconcile persisted-versus-acknowledged event counts, then rerun on a production-like topology/resource configuration using a separate load generator. |
 | Click analytics may be lost or delayed. | Publication happens after the redirect response; process failure before publication or Redis Stream loss can lose clicks. Worker backlog delays the analytics total. | Idempotent worker transaction, pending recovery, lag/pending metrics, and documented best-effort guarantee. | **Accepted prototype limitation:** The user accepted best-effort delivery for this assignment; adopt an outbox/synchronous publication only if a future requirement changes. |
 | Recent local benchmark analytics counts disagree. | Warm report: 2,797 expected/persisted vs 1,390 acknowledged. Cold report: 2,720 expected/persisted vs 1,359 acknowledged. Reports showed zero lag/pending but timed out draining. | Exact-marker cleanup was run successfully for both reports; reports and values are retained. | **Open investigation:** Reconcile persisted-event and acknowledged-event telemetry before another benchmark. Do not infer cause from these measurements alone. |
 | Public API can be abused or used for harmful redirects. | Shared analytics authentication and per-client rate limits are implemented, but a legitimate redirect service may still be abused for phishing or automated traffic. | URL scheme/host validation, no destination dereference, HMACed short-lived client rate buckets, and bounded logs/metrics. | **Open before public exposure:** Add destination-abuse controls and ownership/administrative flows. HTTP(S) validation and rate limits alone are not abuse prevention. |
@@ -177,8 +177,10 @@ and data.
   [`t110-cold-results.json`](t110-cold-results.json). The latest human-run
   pair's cleanup completed, but its persisted-versus-acknowledged discrepancy
   remains open.
-- Q-6/Q-7 are **not accepted**. The local results are diagnostic and do not
-  replace a representative capacity run.
+- Q-6/Q-7 are **not accepted**. Local diagnostic validation is complete for
+  assignment delivery with this limitation disclosed; it does not replace a
+  production-like capacity run with comparable topology/resources and a
+  separate load generator.
 - T-111 documentation is assembled. Clean-environment human sign-off remains
   pending; no external approval or production readiness is claimed.
 
