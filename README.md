@@ -1,4 +1,4 @@
-# URL Shortener
+﻿# URL Shortener
 
 Build a scalable URL shortener service with APIs, persistence, and analytics.
 
@@ -102,6 +102,40 @@ rules. Do not publish or proxy this listener through the public API gateway.
 Metric labels use route templates and do not include short codes, destination
 URLs, client IP addresses, or user agents.
 
+## API usage
+
+The examples below use `http://127.0.0.1:8000` as the API base URL. Replace it
+with the deployed service origin when appropriate. The core endpoints are:
+
+| Method | Endpoint | Purpose | Authentication |
+|---|---|---|---|
+| `POST` | `/api/v1/shorten` | Create a short link, optionally with a custom alias. | None |
+| `GET` | `/{code}` | Redirect to the destination URL. | None |
+| `GET` | `/api/v1/links/{code}/analytics` | Read the aggregate click count. | Bearer analytics key required |
+| `GET` | `/health/live` | Check that the API process is running. | None |
+| `GET` | `/health/ready` | Check PostgreSQL, Redis, and analytics-auth configuration. | None |
+
+Health responses look like:
+
+```json
+{"status":"alive"}
+```
+
+```json
+{
+  "status": "ready",
+  "dependencies": {
+    "postgres": true,
+    "redis": true,
+    "analytics_authentication": true
+  }
+}
+```
+
+Readiness returns `503` with `"status":"not_ready"` if any dependency or
+analytics authentication configuration is unavailable. It does not expose
+connection details.
+
 Create a short link with an automatically generated code:
 
 ```powershell
@@ -111,8 +145,21 @@ $response = Invoke-RestMethod -Method Post `
   -Body '{"destination_url":"https://example.com/path"}'
 ```
 
-The API returns the generated code, its public short URL, and creation time.
-Creation errors use `{"error":{"code":"...","message":"...","details":...}}`.
+On success, the API returns `201 Created` with the generated code, its public
+short URL, and creation time, for example:
+
+```json
+{
+  "code": "Ab12Cd34",
+  "short_url": "http://127.0.0.1:8000/Ab12Cd34",
+  "created_at": "2026-10-13T04:00:00Z"
+}
+```
+
+The destination must be an absolute HTTP(S) URL. Creation errors use the
+common envelope `{"error":{"code":"...","message":"...","details":...}}`;
+invalid request data returns `422`, a duplicate custom alias returns `409`,
+and temporary persistence or rate-limit-service failures return `503`.
 
 To request a custom alias, include the optional `custom_alias` field:
 
@@ -139,25 +186,34 @@ Follow a returned short URL to test redirect behavior:
 curl.exe -i $response.short_url
 ```
 
-The redirect endpoint returns `302` with the destination in the `Location`
-header. An unknown code returns `404` only after PostgreSQL confirms it does
-not exist; Redis outages fall back to PostgreSQL.
+The redirect endpoint returns `302 Found` with the destination in the
+`Location` header. An unknown code returns `404` only after PostgreSQL confirms
+it does not exist; temporary lookup failures return `503`. Redis cache outages
+fall back to PostgreSQL when it is available.
 
-Retrieve the aggregate click count for a short code:
+Retrieve the aggregate click count for a short code. The environment variable
+should contain the same private token configured as
+`URL_SHORTENER_ANALYTICS_API_KEY`; do not paste the token into source control:
 
 ```powershell
+$headers = @{
+  Authorization = "Bearer $env:URL_SHORTENER_ANALYTICS_API_KEY"
+}
 Invoke-RestMethod `
   -Uri "http://127.0.0.1:8000/api/v1/links/$($response.code)/analytics" `
-  -Headers @{ Authorization = "Bearer $env:URL_SHORTENER_ANALYTICS_API_KEY" }
+  -Headers $headers
 ```
 
 Analytics requires the configured bearer token. It authorizes access to all
 links for any holder of the shared token; this prototype has no per-user or
-per-link identity/authorization model. The response contains `code` and
-`clicks_total`, the aggregate over the trailing 12 calendar months; an unknown
-code returns `404`. The API reads daily aggregate rows from PostgreSQL. Since
-the analytics worker updates them asynchronously from Redis Streams, they may
-not include the most recent redirects until those events are processed.
+per-link identity/authorization model. A successful response is `200 OK` and
+contains `code` and `clicks_total`, the aggregate over the trailing 12 calendar
+months, for example `{"code":"Ab12Cd34","clicks_total":3}`. An unknown code
+returns `404`; missing or invalid credentials return `401`; temporary database
+or rate-limit-service failures return `503`. The API reads daily aggregate rows from
+PostgreSQL. Since the analytics worker updates them asynchronously from
+Redis Streams, counts may not include the most recent redirects until those
+events are processed.
 
 The API rate limits each client address in a 60-second fixed window: 10 link
 creations, 120 redirects, and 60 analytics requests. Exceeded requests receive
