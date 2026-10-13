@@ -17,6 +17,9 @@ file (**2 passed**) and full opt-in suite (**128 passed, no skips**). The user
 reports rotating the analytics key after it appeared in shared terminal
 output; its value is not recorded here. See the current
 [validation evidence](../evidence/ambiguous/validation.md).
+For current task-by-task human verification across T-101–T-111, use the
+[baseline record in greenfield validation](../evidence/greenfield/validation.md#baseline-human-validation-t-101-through-t-111);
+older task entries below preserve their original run-time results.
 
 | Task | Prompt summary and AI contribution | Engineer review, edge cases, and resulting changes | Validation and artifacts |
 |---|---|---|---|

@@ -10,9 +10,11 @@
 - Focused tests:
   `python -m pytest -q tests\test_link_creation.py tests\test_redirects.py`
   — **42 passed**.
-- Current regular suite: `python -m pytest -q` — **102 passed, 2 skipped** (opt-in
-  integration tests).
-- User-run live integration suite with PostgreSQL/Redis:
+- Latest user-run live integration suite with PostgreSQL/Redis:
   `URL_SHORTENER_RUN_INTEGRATION=1 python -m pytest -q tests\test_service_integration.py`
   — **2 passed**, including alias persistence, duplicate conflict, and redirect.
+- Latest user-run full suite with integration enabled:
+  `URL_SHORTENER_RUN_INTEGRATION=1 python -m pytest -q` — **128 passed, no
+  skips**. Baseline task human-validation status is recorded in
+  [greenfield validation](../greenfield/validation.md#baseline-human-validation-t-101-through-t-111).
 - No migration was needed. Q-6/Q-7 are independent and remain unaccepted.
