@@ -181,8 +181,10 @@ and data.
   assignment delivery with this limitation disclosed; it does not replace a
   production-like capacity run with comparable topology/resources and a
   separate load generator.
-- T-111 documentation is assembled. Clean-environment human sign-off remains
-  pending; no external approval or production readiness is claimed.
+- T-111 assignment-level setup/sign-off is complete in a newly created Python
+  environment. The validation used the existing checkout/database; a fresh
+  checkout or empty-database migration run, external approval, and production
+  readiness are not claimed.
 
 See the [README](../README.md) for setup, API use, tests, and benchmark commands,
 the [engineering breakdown](04-engineering-breakdown.md) for task history and

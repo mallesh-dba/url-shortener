@@ -143,11 +143,11 @@ The prototype-level requirements REQ-1–REQ-3 and REQ-9–REQ-10, and cross-cut
 
 #### T-111: Document and Sign Off Engineering Deliverables
 
-- **Status:** Documentation and evidence collation complete. Human sign-off remains pending because setup has not been followed from a clean environment; Q-6/Q-7 capacity acceptance is also deferred.
+- **Status:** Documentation and assignment-level human sign-off complete. On 2026-10-13 the user followed setup in a newly created Python 3.12 virtual environment, reran integration/full tests, inspected current schema and metrics, and completed a live smoke flow. This used the existing checkout/database, so a fresh-checkout or empty-database migration run is not claimed. Q-6/Q-7 capacity acceptance and production readiness remain deferred.
 - **Description & scope:** Document setup, APIs, architecture, migrations, test and benchmark commands/results, decisions, risks, assumptions, and limitations. Explicitly state analytics delivery guarantees and remaining production decisions.
 - **Dependencies:** T-109 and T-110.
 - **AI-assistance point:** Ask AI to draft documentation from final code and captured test/benchmark output.
-- **Human validation / verification check:** For final sign-off, follow setup instructions from a clean environment, rerun the documented regular and integration tests against provisioned PostgreSQL/Redis, inspect the migrated schema, and verify API/worker metrics and smoke-test behavior. Review the reported local benchmark runs and limitations; do not mark capacity accepted unless a future representative test meets Q-6/Q-7. This clean-environment sign-off has not yet been performed.
+- **Human validation / verification check:** For assignment sign-off, follow setup in a newly created Python environment, rerun regular and integration tests against PostgreSQL/Redis, inspect the migrated schema, and verify API/worker metrics and smoke behavior. Review local benchmark results and disclose unmet Q-6/Q-7. A fresh-checkout/empty-database migration run and production reviews are additional verification, not evidence of capacity acceptance.
 
 ### Approved Brownfield Extension and Conditional Tasks
 
@@ -162,7 +162,7 @@ Custom aliases were accepted as a separate brownfield extension on 2026-10-12. A
 
 ## Part 2: Example Scenarios Mapped to Project-Wide Tasks
 
-The prompts below are illustrative rather than historical verbatim prompts. Baseline service implementation and validation evidence are recorded in Part 1, the README, and the AI-assisted work log. The brownfield custom-alias scenario and ambiguous tracking requirements were subsequently accepted as separate extensions. The ambiguous tracking migrations and PostgreSQL/Redis integration validation are complete; clean-environment/deployment sign-off and Q-6/Q-7 capacity acceptance remain pending. See the [baseline human validation record](../evidence/greenfield/validation.md#baseline-human-validation-t-101-through-t-111).
+The prompts below are illustrative rather than historical verbatim prompts. Baseline service implementation and validation evidence are recorded in Part 1, the README, and the AI-assisted work log. The brownfield custom-alias scenario and ambiguous tracking requirements were subsequently accepted as separate extensions. The ambiguous tracking migrations and PostgreSQL/Redis integration validation are complete; assignment-level setup/sign-off was completed in a newly created Python environment on 2026-10-13. Production deployment review and Q-6/Q-7 capacity acceptance remain pending. See the [baseline human validation record](../evidence/greenfield/validation.md#baseline-human-validation-t-101-through-t-111).
 
 ### 1. Greenfield Requirement — Build the Core URL Shortener
 
@@ -209,7 +209,7 @@ Validation was run against the current code and documented contracts:
 - The user applied revisions `20261012_01` and `20261012_02`; PostgreSQL reported `20261012_02`, and inspection confirmed code-based click events, daily aggregates, and processed-event deduplication tables.
 - After correcting the integration-test fixture to wrap its test key in `SecretStr`, `URL_SHORTENER_RUN_INTEGRATION=1 python -m pytest -q tests\test_service_integration.py` passed **2 tests** against the current PostgreSQL/Redis schema. The user also manually confirmed a new link returned 302 and its authenticated analytics count reached 1 after polling, verifying worker-to-aggregate processing.
 - Manual brownfield checks confirmed alias creation and 302 redirect, 422 for malformed/reserved aliases, generated-code behavior when the alias is omitted, and 409 for a duplicate alias. An initial duplicate request returned 422 because its curl body was malformed JSON; the corrected `Invoke-RestMethod` request returned 409.
-- The user reports rotating the analytics key after exposure in shared terminal output; the value is not recorded. Q-6/Q-7 remain unaccepted: the recorded local load runs missed their throughput and latency targets. The analytics drain discrepancy and clean-environment T-111 sign-off remain open.
+- The user reports rotating the analytics key after exposure in shared terminal output; the value is not recorded. Q-6/Q-7 remain unaccepted: the recorded local load runs missed their throughput and latency targets. The analytics drain discrepancy remains open; assignment-level T-111 setup/sign-off is complete, while production-readiness reviews remain outstanding.
 
 #### T-116: Implement the Requirement-Processing Prototype
 
