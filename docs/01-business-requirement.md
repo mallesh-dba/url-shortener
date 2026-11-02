@@ -1,50 +1,75 @@
 # Business Requirement: AI-Assisted Engineering Prototype
 
-**Status:** Approved baseline for assignment prototype (simulated)  
+**Status:** Approved baseline for assignment planning (simulated)<br>
 **Approval authority:** Candidate acting as business and engineering owner  
 **External stakeholder approval:** Not obtained
 
-## Business Context
+## Business context and need
 
-The assignment asks for a working prototype that demonstrates how AI-assisted software engineering can help turn software requirements into quality engineering outcomes. The engineer must direct the work, retain ownership of all outputs, and validate AI-generated results. AI assists engineering tasks; it does not replace engineering judgment or autonomously own delivery.
+The assignment evaluates whether the candidate can use AI-assisted software
+engineering while retaining engineering judgment and ownership. AI may help
+analyze requirements, draft implementation, and identify tests, but a human
+must review, refine, reject, and validate outputs before acceptance.
 
-The prototype must demonstrate this approach with the mandatory use case:
+The mandatory engineering example is a URL-shortener service with APIs,
+persistence, and analytics.
 
-> Build a scalable URL shortener service with APIs, persistence, and analytics.
-
-## Business Need
-
-Interviewers need to evaluate whether the candidate can use AI tools effectively while applying sound engineering judgment. The demonstration should connect a stated requirement to structured engineering work, working outputs, and evidence that those outputs were reviewed and tested.
-
-## Desired Outcomes
+## Desired outcomes
 
 1. A reviewer can run the prototype and provide a requirement for processing.
-2. The prototype produces clear, structured engineering outputs from that requirement.
-3. The URL-shortener example demonstrates API behavior, persistence, analytics, tests, and supporting documentation.
-4. Greenfield, brownfield, and ambiguous scenarios demonstrate how the approach adapts to different requirement types.
-5. The candidate explains AI usage, design rationale, validation, risks, assumptions, and limitations.
+2. The prototype returns structured, reviewable engineering outputs.
+3. The URL-shortener example demonstrates API behavior, persistence,
+   analytics, tests, and supporting documentation.
+4. Greenfield, brownfield, and ambiguous scenarios show how the workflow
+   handles different kinds of requirements.
+5. The candidate explains AI usage, design rationale, validation, risks,
+   assumptions, and limitations.
 
-## High-Level Business Requirements
+## High-level business requirements
 
-| ID | Business requirement |
+| ID | Requirement |
 |---|---|
-| BR-1 | The solution must provide a runnable demonstration that accepts a software requirement and produces structured engineering outputs. |
-| BR-2 | The solution must demonstrate human-directed AI assistance across relevant engineering tasks, with the candidate accountable for reviewing and accepting outputs. |
-| BR-3 | The solution must use the URL-shortener scenario to demonstrate a service with APIs, persistence, and analytics. |
-| BR-4 | The solution must include greenfield, brownfield, and ambiguous requirement examples, each showing execution and validation. |
-| BR-5 | The solution must provide architecture, setup, testing, risk, and implementation documentation sufficient for an interviewer to evaluate it. |
+| BR-1 | Provide a runnable demonstration that accepts a software requirement and produces structured engineering outputs. |
+| BR-2 | Demonstrate human-directed AI assistance; the candidate remains accountable for reviewing and accepting outputs. |
+| BR-3 | Use the URL-shortener scenario to demonstrate a service with APIs, persistence, and analytics. |
+| BR-4 | Include greenfield, brownfield, and ambiguous scenarios, each with execution and validation evidence. |
+| BR-5 | Provide architecture, setup, testing, risk, implementation, and limitation documentation sufficient for evaluation. |
 
-## Scope Boundaries
+## Scenario requirement documents
 
-The deliverable is an interview assignment prototype and its supporting evidence. It is not a commitment to launch or operate a production service. The assignment does not prescribe a programming language, framework, database, hosting provider, API routes, or numeric performance targets. Those choices must be proposed and justified during engineering design rather than represented as business-approved constraints.
+The scenario-specific requirements are split across these documents:
 
-## Business Acceptance
+| Scenario | Requirement document | Scope |
+|---|---|---|
+| Greenfield | [Greenfield requirements](Greenfield_requirement.MD) | Core URL-shortener requirements and architecture-specific performance targets. |
+| Brownfield | [Brownfield requirements](Brownfield_requirement.MD) | Optional custom aliases, preserving generated-code compatibility. |
+| Ambiguous | [Ambiguous requirements](Ambiguous_requirement.MD) | Clarified analytics privacy, retention, access, rate limiting, and event-delivery behavior. |
 
-The assignment baseline is accepted for prototype planning when the outcomes and scope above are understood. The prototype is ready for evaluation when it runs using documented instructions, demonstrates the required scenarios and URL-shortener use case, and presents evidence of testing and engineering review.
+The [requirement analysis](02-requirement-analysis.md) keeps the shared
+requirement IDs and maps them to scenario docs, implementation records, and
+validation evidence.
 
-## Approval Record
+## Scope boundaries
 
-This is a simulated approval for the interview assignment only. It must not be presented as external stakeholder sign-off.
+This is an interview-assignment prototype, not a commitment to launch or
+operate a production service. The assignment itself does not prescribe a
+programming language, framework, database, hosting provider, API routes, or
+numeric performance targets. Technology choices and detailed service targets
+are engineering design decisions and must not be presented as externally
+approved business constraints.
+
+## Business acceptance
+
+The assignment baseline is accepted for prototype planning when the outcomes
+and scope above are understood. The prototype is ready for evaluation when it
+runs using documented instructions, demonstrates the required scenarios and
+URL-shortener use case, and presents evidence of testing and engineering
+review.
+
+## Approval record
+
+This is simulated approval for the interview assignment only; it is not
+external stakeholder sign-off.
 
 | Role | Name | Decision | Date |
 |---|---|---|---|

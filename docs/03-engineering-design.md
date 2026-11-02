@@ -33,7 +33,10 @@ flowchart LR
 - **PostgreSQL:** Stores short-link mappings, raw click events, daily aggregates, and event-ID deduplication markers. It remains authoritative when the cache is empty or unavailable.
 - **Redis cache:** Holds frequently resolved short-code mappings with a finite TTL. Cache loss affects performance, not correctness.
 - **Redis Stream and analytics worker:** Buffers events containing only event ID, short-link code, and UTC click timestamp. The worker resolves the code to its internal link ID for aggregation, stores the raw event within its retention window, updates the daily aggregate, records an idempotency marker, and acknowledges after the transaction commits.
-- **Analytics access and rate limits:** Analytics requires the configured shared Bearer key. Redis-backed fixed-window limits apply per client address; forwarded addresses are used only behind explicitly configured trusted proxies.
+- **Analytics access and rate limits:** Analytics requires the configured
+  `URL_SHORTENER_ANALYTICS_API_KEY`. Redis-backed fixed-window limits apply
+  per client address; forwarded addresses are used only behind explicitly
+  configured trusted proxies.
 
 ## 3. Data Flows
 
@@ -66,7 +69,9 @@ sequenceDiagram
 3. On a cache miss, it reads PostgreSQL and populates Redis. An unknown code returns `404 Not Found`.
 4. For a known code, the service schedules a FastAPI background task to publish a click event to the Redis Stream, then returns a `302 Found` redirect to the stored URL. A temporary redirect avoids browsers permanently caching the mapping and bypassing future analytics.
 5. An analytics worker reads the stream. In one PostgreSQL transaction it records the event ID for deduplication, inserts the raw event if it is inside the 90-day window, and increments the event date's daily aggregate if it is inside the 12-month window. It acknowledges the stream entry only after commit.
-6. `GET /api/v1/links/{code}/analytics` requires a valid shared Bearer key and sums the retained daily aggregates over the trailing 12 calendar months.
+6. `GET /api/v1/links/{code}/analytics` requires a valid
+   `URL_SHORTENER_ANALYTICS_API_KEY` and sums the retained daily aggregates
+   over the trailing 12 calendar months.
 
 ```mermaid
 sequenceDiagram
@@ -100,7 +105,7 @@ The task is scheduled as part of the response handling; a process crash before t
 |---|---|---|
 | `POST /api/v1/shorten` | Validate and create a short link. Request body: `{"destination_url":"https://example.com/path","custom_alias":"summer-sale"}`; `custom_alias` is optional. Rate limited per client address (10/minute). | `201` with `code`, `short_url`, and `created_at`; `422` for invalid input; `409` (`short_code_conflict`) if a custom alias is already used; `429` when limited; `503` if persistence/rate limiting is unavailable. `short_url` uses the configured `URL_SHORTENER_PUBLIC_BASE_URL` origin. |
 | `GET /{code}` | Resolve a short code and redirect. Rate limited per client address (120/minute). | `302` with `Location`; `404` only after PostgreSQL confirms no mapping; `429` when limited; `503` when the database lookup or rate limiting fails. |
-| `GET /api/v1/links/{code}/analytics` | Retrieve click analytics over the trailing 12 calendar months. Requires the configured shared Bearer key and is rate limited per client address (60/minute). | `200` with `code` and `clicks_total`; `401` for missing/invalid key; `404` for an unknown code; `429` when limited; `503` when PostgreSQL, Redis rate limiting, or analytics authentication configuration is unavailable. Aggregates are asynchronous and may lag recent redirects. |
+| `GET /api/v1/links/{code}/analytics` | Retrieve click analytics over the trailing 12 calendar months. Requires `URL_SHORTENER_ANALYTICS_API_KEY` and is rate limited per client address (60/minute). | `200` with `code` and `clicks_total`; `401` for missing/invalid key; `404` for an unknown code; `429` when limited; `503` when PostgreSQL, Redis rate limiting, or analytics authentication configuration is unavailable. Aggregates are asynchronous and may lag recent redirects. |
 
 Errors use the JSON shape `{"error":{"code":"...","message":"...","details":...}}`. Rate limits use a 60-second fixed window. Configure `URL_SHORTENER_ANALYTICS_API_KEY` with a private random value of at least 32 characters. Analytics uses one shared key and does not provide per-user or per-link authorization. Rate-limit keys contain an HMAC of the resolved client address and expire with the window. Forwarded addresses are honored only when the immediate peer is in `URL_SHORTENER_TRUSTED_PROXY_CIDRS`; otherwise proxy headers are ignored. Keep the service off public deployment until remaining abuse, ownership, and administrative controls are addressed.
 
@@ -201,7 +206,11 @@ short codes.
 
 - Accept only absolute HTTP and HTTPS destinations; reject malformed URLs and other schemes. The service does not dereference the destination during creation, reducing server-side request forgery exposure.
 - Use parameterized SQL through SQLAlchemy, keep credentials in environment/secret management, and avoid logging full URLs if they may contain sensitive query values.
-- Analytics requires a configured shared Bearer key. Fixed-window rate limits are enforced through Redis at 10 creations, 120 redirects, and 60 analytics requests per client per minute; they fail closed if Redis is unavailable. They do not replace destination abuse review, link ownership, or administrative controls.
+- Analytics requires the configured `URL_SHORTENER_ANALYTICS_API_KEY`.
+  Redis enforces fixed-window limits of 10 creations, 120 redirects, and 60
+  analytics requests per client per minute; requests fail closed if Redis is
+  unavailable. These limits do not replace destination abuse review, link
+  ownership, or administrative controls.
 - Use `URL_SHORTENER_TRUSTED_PROXY_CIDRS` only for known reverse-proxy networks. Ignore forwarded client-address headers from untrusted peers. HMAC client addresses for rate-limit keys and do not write them to events, logs, or metric labels.
 - Scale API processes horizontally behind a load balancer; PostgreSQL and Redis are shared services. Use pool sizing, database query monitoring, and cache hit-rate measurements to find bottlenecks.
 - Add structured request logs and metrics for create/redirect/analytics latency, status codes, cache hit/miss/error counts, code collision retries, database pool utilization, event enqueue errors, and worker lag. Do not use the short code or destination URL as high-cardinality metric labels.
