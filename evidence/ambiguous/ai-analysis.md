@@ -104,9 +104,9 @@ documentation/evidence. Do not claim deployment approval or durable tracking.
 settings, migration chain, tests, docs, and scenario evidence. Implemented
 daily retained aggregates and event-ID deduplication, changed new raw events
 and Redis Stream payloads to event ID/code/UTC timestamp, retained compatibility
-with already-pending legacy `link_id` stream entries, added the shared analytics
-Bearer key and Redis fixed-window limits, and added trusted-proxy client-address
-resolution. Added migrations and updated focused coverage/documentation.
+with already-pending legacy `link_id` stream entries, added analytics authentication via `URL_SHORTENER_ANALYTICS_API_KEY` and Redis fixed-window
+limits, and added trusted-proxy client-address resolution. Added migrations
+and updated focused coverage/documentation.
 
 **Human review/refinement:** Kept redirect publication asynchronous and
 best-effort as accepted; did not add IP/user-agent event fields or replace

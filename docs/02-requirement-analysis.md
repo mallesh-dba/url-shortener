@@ -1,76 +1,127 @@
 # Requirement Analysis
 
-**Source:** [Business Requirement](01-business-requirement.md)  
-**Status:** Analysis baseline for assignment prototype  
-**Purpose:** Convert business outcomes into verifiable requirements without prematurely selecting an implementation stack.
+**Source:** [Business requirement](01-business-requirement.md)<br>
+**Status:** Cross-scenario analysis baseline for the assignment prototype<br>
+**Purpose:** Turn business outcomes into verifiable requirements and preserve
+traceability without treating engineering choices as business approval.
 
 ## Interpretation
 
-The assignment has two related outcomes:
+The assignment has two connected outcomes:
 
-1. A runnable prototype that accepts a software requirement and produces structured engineering outputs through an engineer-directed workflow.
-2. An engineering demonstration that applies this approach to the URL-shortener use case and validates the resulting code, API contracts, tests, and documentation.
+1. A runnable, engineer-directed workflow that accepts a requirement and
+   produces structured engineering outputs for review.
+2. A URL-shortener example that demonstrates implementation, tests,
+   documentation, and evidence across greenfield, brownfield, and ambiguous
+   scenarios.
 
-The prototype must not imply that AI autonomously owns or approves engineering decisions. The implementation and evidence must make human review visible.
+The candidate retains ownership of AI-assisted output. No AI response, local
+template, or generated artifact is automatically an approved requirement.
 
-## Functional Requirements
-
-| ID | Requirement | Source | Priority |
-|---|---|---|---|
-| REQ-1 | The runnable prototype shall accept a software requirement as input. | BR-1 | Must |
-| REQ-2 | For an input requirement, the prototype shall produce structured outputs sufficient to review the requirement interpretation and proposed engineering work. | BR-1 | Must |
-| REQ-3 | The workflow shall let the engineer review, refine, or reject AI suggestions before treating them as accepted outputs. | BR-2 | Must |
-| REQ-4 | The URL-shortener example shall provide an API operation to create a short link from a valid destination URL. | BR-3 | Must |
-| REQ-5 | The URL-shortener implementation shall persist the short-link mapping. | BR-3 | Must |
-| REQ-6 | A request to a known short link shall redirect to its stored destination. | BR-3 | Must |
-| REQ-7 | The URL-shortener implementation shall record link usage and expose analytics through a documented API or interface. | BR-3 | Must |
-| REQ-8 | Invalid input and unknown short links shall produce documented error behavior. | BR-3 | Must |
-| REQ-9 | The solution shall include greenfield, brownfield, and ambiguous examples. Each example shall show the input, task breakdown, AI-assisted work, and validation. | BR-4 | Must |
-| REQ-10 | The solution shall include an architecture overview, setup instructions, testing approach, and an engineering summary of artifacts, decisions, risks, assumptions, and limitations. | BR-5 | Must |
-
-## Quality and Engineering Requirements
+## Cross-cutting functional requirements
 
 | ID | Requirement | Source | Priority |
 |---|---|---|---|
-| Q-1 | Generated or AI-assisted code and documentation shall be reviewed by the candidate before acceptance. | BR-2 | Must |
-| Q-2 | Automated tests shall cover the URL-shortener's core create, persistence, redirect, analytics, and error behaviors. | BR-3 | Must |
-| Q-3 | The solution shall document how correctness and output quality were validated, including test commands and results. | BR-5 | Must |
-| Q-4 | The design shall discuss scalability, security, and performance considerations and disclose known limitations. | BR-3, BR-5 | Must |
-| Q-5 | The solution shall be maintainable and understandable to a reviewer, with clear separation of responsibilities and readable documentation. | BR-5 | Should |
-| Q-6 | Under the specified peak workload, the URL-shortener shall support a 100:1 redirect-to-creation request ratio, with approximately 1,000 redirect requests per second and 10 link-creation requests per second. | Performance targets supplied for the architecture | Must |
-| Q-7 | At the specified peak workload, redirect latency for `GET /{short_code}` shall be P95 <= 50 ms and shortening latency for `POST /api/v1/shorten` shall be P95 <= 200 ms. | Performance targets supplied for the architecture | Must |
+| REQ-1 | The runnable prototype accepts a software requirement as input. | BR-1 | Must |
+| REQ-2 | For an input, the prototype produces structured outputs sufficient to review interpretation and proposed engineering work. | BR-1 | Must |
+| REQ-3 | In the overall engineer-directed workflow, the engineer reviews, refines, or rejects AI-assisted suggestions before treating them as accepted outputs. The local CLI itself uses deterministic templates and does not call an AI model. | BR-2 | Must |
+| REQ-9 | The solution includes greenfield, brownfield, and ambiguous examples, each showing input, task breakdown, AI-assisted work, human review, and validation. | BR-4 | Must |
+| REQ-10 | The solution includes architecture, setup, testing, and a summary of artifacts, decisions, risks, assumptions, and limitations. | BR-5 | Must |
 
-## Acceptance Checks
+## Scenario requirements
 
-- A reviewer can start the prototype using the documented setup instructions.
-- The prototype accepts a requirement and returns structured, reviewable outputs.
-- The engineer's role in directing and validating AI assistance is demonstrated; no autonomous approval is implied.
-- A valid URL can be shortened, persisted, and later resolved through a redirect.
-- Analytics are recorded and retrievable using the documented API or interface.
-- Invalid input and unknown short codes return the documented errors.
-- Automated tests exercise the core URL-shortener behaviors and can be run using the documented command.
-- Performance validation reports the workload, test duration, environment, and cache state, and evaluates Q-6 and Q-7 against the specified peak request rates and P95 limits.
-- Each of the three required example scenarios includes task decomposition, AI-assisted execution, and validation evidence.
-- Architecture, trade-offs, risks, assumptions, and limitations are documented.
+### Greenfield: URL-shortener baseline
 
-## Clarifications, Assumptions, and Decisions
-
-| Topic | Current interpretation or assumption | Status / follow-up |
+| ID | Requirement | Priority |
 |---|---|---|
-| Performance targets | The architecture input specifies a 100:1 redirect-to-creation ratio, peak rates of about 1,000 redirects/s and 10 creations/s, and P95 limits of 50 ms and 200 ms respectively. | Treat as required targets; benchmark environment, duration, and cache-state methodology still need to be defined. |
-| Analytics scope | At minimum, analytics means recording and retrieving usage for a short link. Exact metrics and granularity are not specified. | Assumption; state the chosen scope in design. |
-| AI integration | AI tools must assist development tasks. The assignment does not explicitly require embedding a live AI provider in the runnable prototype. | Design decision; explain the selected demonstration approach. |
-| Technology stack | The assignment itself does not mandate a stack. The architecture input specifies Python 3.11+, FastAPI, async SQLAlchemy 2.0, PostgreSQL, and Redis for this design. | Treat as architecture constraints for this use case; record separately if they become approved project-wide requirements. |
-| Short-link behavior | The assignment baseline does not specify custom aliases, expiration, deletion, or authentication. | Custom aliases were separately accepted as a brownfield extension on 2026-10-12 and are documented in the engineering design; expiration, deletion, and authentication remain out of scope. |
-| Analytics privacy | Collection of IP addresses, user-agent strings, or other personal data is not required by the assignment. | Avoid unless justified; document any collection and retention. |
-| Approval | No actual business stakeholder is provided for the interview assignment. | Baseline approval is simulated by the candidate and must be described as such. |
+| REQ-4 | Provide an API operation to create a short link from a valid destination URL. | Must |
+| REQ-5 | Persist the short-link mapping. | Must |
+| REQ-6 | Redirect a request to a known short code to its stored destination. | Must |
+| REQ-7 | Record link usage and expose analytics through a documented API or interface. | Must |
+| REQ-8 | Document and return appropriate error behavior for invalid input and unknown short links. | Must |
 
-## Traceability to Next Artifacts
+Details and the architecture-specific Q-6/Q-7 targets are in the
+[greenfield requirements](Greenfield_requirement.MD).
 
-- **Engineering design:** Documents architecture, selected technologies, API/data approach, and trade-offs for REQ-1 through REQ-10.
-- **Task breakdown:** Converts requirements into ordered tasks with dependencies, AI-assistance points, and validation checks.
-- **Testing and validation:** Define verification criteria during requirements and design; create and run tests alongside or after implementation, then record results before accepting deliverables.
+### Brownfield: optional custom aliases
 
-## Analysis Sign-Off
+The alias contract is a separately accepted extension; it does not change
+greenfield requirements for callers that omit an alias. The detailed
+validation, reserved names, conflict response, and acceptance checks are in
+the [brownfield requirements](Brownfield_requirement.MD). Implementation is
+tracked by T-112/T-113.
 
-This analysis is ready to inform engineering design and task decomposition. Technology selection and detailed implementation sequencing remain engineering decisions for the next stage; they are not implied to have received stakeholder approval.
+### Ambiguous: tracking privacy and safety
+
+The initial request “Make tracking secure and safe” required clarification
+before implementation. Its accepted interpretation covers minimal click-event
+fields, retention, analytics access, rate limiting, trusted proxies, and
+best-effort event delivery. See the [ambiguous requirements](Ambiguous_requirement.MD);
+implementation and validation are tracked by T-114/T-115.
+
+## Quality and engineering requirements
+
+| ID | Requirement | Source | Priority / status |
+|---|---|---|---|
+| Q-1 | Candidate reviews AI-assisted code and documentation before acceptance. | BR-2 | Must |
+| Q-2 | Automated tests cover core URL-shortener creation, persistence, redirect, analytics, and error behavior. | BR-3 | Must |
+| Q-3 | Validation approach, commands, and results are documented. | BR-5 | Must |
+| Q-4 | Design discusses security, scalability, and performance and discloses known limitations. | BR-3, BR-5 | Must |
+| Q-5 | Deliverables are understandable and maintainable, with clear responsibilities and readable documentation. | BR-5 | Should |
+| Q-6 | For the architecture-supplied workload, support approximately 1,000 redirects/s and 10 creations/s (100:1 ratio). | Engineering design input | Unverified validation target |
+| Q-7 | At the Q-6 workload, redirect P95 <= 50 ms and `POST /api/v1/shorten` P95 <= 200 ms. | Engineering design input | Unverified validation target |
+
+Q-6/Q-7 are engineering targets, not numeric targets supplied by the
+assignment or approved by an external stakeholder. "Unverified validation
+target" means these values must be tested; it does not mean they have passed
+or are accepted commitments. Acceptance requires measurements under a
+representative workload and environment. Current local results miss the
+targets; see [performance evidence](04-engineering-breakdown.md) and
+[risk/assumption reference](05-risk-assumptions-database-design.md).
+
+## Acceptance checks
+
+- A reviewer can start the prototype using documented setup instructions.
+- The prototype accepts a requirement and emits structured, reviewable
+  output.
+- The local requirement-processing CLI produces deterministic drafts without
+  making live AI calls; any separate AI-assisted analysis is reviewed by a
+  human before acceptance. No autonomous approval is implied.
+- A valid URL can be shortened, persisted, and resolved through a redirect.
+- Analytics are recorded and retrievable through the documented interface.
+- Invalid input and unknown codes return documented errors.
+- Automated tests cover core behavior and can be run with documented commands.
+- Each scenario has input, AI-assisted work, human decision, and validation
+  evidence.
+- The architecture, trade-offs, risks, assumptions, limitations, and current
+  validation state are documented.
+- Q-6/Q-7 remain unaccepted unless measured throughput, workload ratio, and
+  client-observed latency meet the stated thresholds.
+
+## Decisions and assumptions
+
+| Topic | Analysis | Status |
+|---|---|---|
+| AI integration | AI assists engineering tasks; a live AI provider is not required inside the runnable prototype. | Local requirement-processing CLI is deterministic and explicitly does not call an AI model. |
+| Technology | The assignment does not mandate a stack. PostgreSQL/Redis and detailed APIs are selected for this engineering design. | Design constraint for this use case; not externally approved policy. |
+| Analytics | Baseline requires recording and retrieving link usage. The detailed accepted collection, retention, and access rules are scenario-specific. | See [ambiguous requirements](Ambiguous_requirement.MD). |
+| Requirement-processing CLI | The runnable local CLI structures scenario inputs into drafts using deterministic templates; it does not provide live AI analysis. | AI-assisted analysis and human review are documented separately from CLI output. |
+| Custom aliases | Not part of baseline; accepted separately as an extension. | See [brownfield requirements](Brownfield_requirement.MD). |
+| Performance | Numeric Q-6/Q-7 values come from the architecture input, not business approval. | Targets remain unaccepted pending representative measurement. |
+| Approval | No external stakeholder is provided for the assignment. | Approval is simulated by the candidate and must be described as such. |
+
+## Traceability to implementation and evidence
+
+| Requirement area | Implementation / plan | Evidence |
+|---|---|---|
+| Prototype workflow, REQ-1–REQ-3 | `src/requirement_processor/` | `tests/test_requirement_processor.py`, README usage |
+| Greenfield, REQ-4–REQ-8 and Q-6/Q-7 | `docs/03-engineering-design.md`; T-101–T-111 in `docs/04-engineering-breakdown.md` | `evidence/greenfield/` and benchmark reports |
+| Brownfield aliases | T-112/T-113 in `docs/04-engineering-breakdown.md` | `evidence/brownfield/` |
+| Ambiguous tracking | T-114/T-115 in `docs/04-engineering-breakdown.md` | `evidence/ambiguous/` |
+| Cross-cutting quality, Q-1–Q-5 | Engineering review, tests, and documentation | `docs/ai-usage-log.md` and the scenario validation records |
+
+## Analysis sign-off
+
+This analysis organizes the accepted assignment baseline and the separately
+accepted scenario extensions. It does not imply external stakeholder
+approval, production readiness, or performance acceptance.

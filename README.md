@@ -1,4 +1,4 @@
-﻿# URL Shortener
+# URL Shortener
 
 Build a scalable URL shortener service with APIs, persistence, and analytics.
 
@@ -41,6 +41,17 @@ These files distinguish assistant-generated analysis from deterministic CLI
 templates; the ambiguous scenario's requirements are accepted, and its
 PostgreSQL/Redis integration and worker-to-aggregate smoke validations are
 complete. Production deployment and capacity acceptance remain follow-up work.
+
+## Scenario requirements and traceability
+
+Requirements are organized by scenario: [greenfield](docs/Greenfield_requirement.MD),
+[brownfield](docs/Brownfield_requirement.MD), and
+[ambiguous](docs/Ambiguous_requirement.MD). The
+[business requirement](docs/01-business-requirement.md) and
+[requirement analysis](docs/02-requirement-analysis.md) provide the overall
+assignment scope and cross-scenario traceability. The greenfield document
+includes a project-specific illustration of the documented planning workflow
+and Greenfield acceptance scope.
 
 ## Development setup
 
@@ -197,7 +208,7 @@ should contain the same private token configured as
 
 ```powershell
 $headers = @{
-  Authorization = "Bearer $env:URL_SHORTENER_ANALYTICS_API_KEY"
+  Authorization = "Bearer <your-analytics-token>"
 }
 Invoke-RestMethod `
   -Uri "http://127.0.0.1:8000/api/v1/links/$($response.code)/analytics" `
@@ -488,8 +499,9 @@ the database/server connection budgets multiplied by the number of deployed
 processes; the example values are starting defaults, not load-tested capacity
 recommendations.
 
-The accepted ambiguous-scenario requirements implement a shared Bearer key for
-analytics and per-client rate limits for creation, redirects, and analytics.
+The accepted ambiguous-scenario requirements use
+`URL_SHORTENER_ANALYTICS_API_KEY` to authenticate analytics requests and apply
+per-client rate limits to creation, redirects, and analytics.
 They do not supply per-user/per-link authorization, destination abuse review,
 link ownership, abuse reporting, or administrative controls. Keep the service
 off public deployment until those remaining controls, trusted-proxy settings,
